@@ -150,7 +150,6 @@ class TextBasedChannel {
     }
 
     let apiMessage;
-
     if (content instanceof APIMessage) {
       apiMessage = content.resolveData();
     } else {
@@ -161,9 +160,13 @@ class TextBasedChannel {
     }
 
     const { data, files } = await apiMessage.resolveFiles();
-    return this.client.api.channels[this.id].messages
-      .post({ data, files })
-      .then(d => this.client.actions.MessageCreate.handle(d).message);
+    return this.client.api.channels[this.id].messages.post({ data, files }).then(d => {
+      if (this.guild) {
+        d.guild_id = this.guild.id;
+      }
+
+      return this.client.actions.MessageCreate.handle(d).message;
+    });
   }
 
   /**
@@ -178,7 +181,9 @@ class TextBasedChannel {
    * channel.startTyping(5);
    */
   startTyping(count) {
-    if (typeof count !== 'undefined' && count < 1) throw new RangeError('TYPING_COUNT');
+    if (typeof count !== 'undefined' && count < 1) {
+      throw new RangeError('TYPING_COUNT');
+    }
     if (this.client.user._typing.has(this.id)) {
       const entry = this.client.user._typing.get(this.id);
       entry.count = count || entry.count + 1;
@@ -248,7 +253,9 @@ class TextBasedChannel {
    * @readonly
    */
   get typingCount() {
-    if (this.client.user._typing.has(this.id)) return this.client.user._typing.get(this.id).count;
+    if (this.client.user._typing.has(this.id)) {
+      return this.client.user._typing.get(this.id).count;
+    }
     return 0;
   }
 
@@ -319,7 +326,9 @@ class TextBasedChannel {
       if (filterOld) {
         messageIDs = messageIDs.filter(id => Date.now() - Snowflake.deconstruct(id).date.getTime() < 1209600000);
       }
-      if (messageIDs.length === 0) return new Collection();
+      if (messageIDs.length === 0) {
+        return new Collection();
+      }
       if (messageIDs.length === 1) {
         await this.client.api.channels(this.id).messages(messageIDs[0]).delete();
         const message = this.client.actions.MessageDelete.getMessage(
@@ -328,7 +337,7 @@ class TextBasedChannel {
           },
           this,
         );
-        return message ? new Collection([[message.id, message]]) : new Collection();
+        return message ? new Collection([ [ message.id, message ] ]) : new Collection();
       }
       await this.client.api.channels[this.id].messages['bulk-delete'].post({ data: { messages: messageIDs } });
       return messageIDs.reduce(
@@ -353,7 +362,7 @@ class TextBasedChannel {
   }
 
   static applyToClass(structure, full = false, ignore = []) {
-    const props = ['send'];
+    const props = [ 'send' ];
     if (full) {
       props.push(
         'lastMessage',
@@ -368,7 +377,9 @@ class TextBasedChannel {
       );
     }
     for (const prop of props) {
-      if (ignore.includes(prop)) continue;
+      if (ignore.includes(prop)) {
+        continue;
+      }
       Object.defineProperty(
         structure.prototype,
         prop,

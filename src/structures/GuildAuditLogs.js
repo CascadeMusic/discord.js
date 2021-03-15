@@ -131,7 +131,10 @@ const Actions = {
  */
 class GuildAuditLogs {
   constructor(guild, data) {
-    if (data.users) for (const user of data.users) guild.client.users.add(user);
+    if (data.users) {
+      this._users = data.users;
+    }
+
     /**
      * Cached webhooks
      * @type {Collection<Snowflake, Webhook>}
@@ -196,15 +199,42 @@ class GuildAuditLogs {
    * @returns {AuditLogTargetType}
    */
   static targetType(target) {
-    if (target < 10) return Targets.GUILD;
-    if (target < 20) return Targets.CHANNEL;
-    if (target < 30) return Targets.USER;
-    if (target < 40) return Targets.ROLE;
-    if (target < 50) return Targets.INVITE;
-    if (target < 60) return Targets.WEBHOOK;
-    if (target < 70) return Targets.EMOJI;
-    if (target < 80) return Targets.MESSAGE;
-    if (target < 90) return Targets.INTEGRATION;
+    if (target < 10) {
+      return Targets.GUILD;
+    }
+
+    if (target < 20) {
+      return Targets.CHANNEL;
+    }
+
+    if (target < 30) {
+      return Targets.USER;
+    }
+
+    if (target < 40) {
+      return Targets.ROLE;
+    }
+
+    if (target < 50) {
+      return Targets.INVITE;
+    }
+
+    if (target < 60) {
+      return Targets.WEBHOOK;
+    }
+
+    if (target < 70) {
+      return Targets.EMOJI;
+    }
+
+    if (target < 80) {
+      return Targets.MESSAGE;
+    }
+
+    if (target < 90) {
+      return Targets.INTEGRATION;
+    }
+
     return Targets.UNKNOWN;
   }
 
@@ -317,13 +347,17 @@ class GuildAuditLogsEntry {
      */
     this.reason = data.reason || null;
 
+    this.executor = (guild.client.options.partials.includes(PartialTypes.USER)
+      ? guild.client.users.add({ id: data.user_id })
+      : guild.client.users.cache.get(data.user_id))
+      ?? guild.client.users.add(logs._users.find(t => t.id === data.user_id)
+        ?? { id: data.user_id }, false);
+
+
     /**
      * The user that executed this entry
      * @type {User}
      */
-    this.executor = guild.client.options.partials.includes(PartialTypes.USER)
-      ? guild.client.users.add({ id: data.user_id })
-      : guild.client.users.cache.get(data.user_id);
 
     /**
      * An entry in the audit log representing a specific change.
@@ -413,73 +447,11 @@ class GuildAuditLogsEntry {
      * The target of this entry
      * @type {?AuditLogEntryTarget}
      */
-    this.target = null;
-    if (targetType === Targets.UNKNOWN) {
-      this.target = this.changes.reduce((o, c) => {
-        o[c.key] = c.new || c.old;
-        return o;
-      }, {});
-      this.target.id = data.target_id;
-      // MEMBER_DISCONNECT and similar types do not provide a target_id.
-    } else if (targetType === Targets.USER && data.target_id) {
-      this.target = guild.client.options.partials.includes(PartialTypes.USER)
-        ? guild.client.users.add({ id: data.target_id })
-        : guild.client.users.cache.get(data.target_id);
-    } else if (targetType === Targets.GUILD) {
-      this.target = guild.client.guilds.cache.get(data.target_id);
-    } else if (targetType === Targets.WEBHOOK) {
-      this.target =
-        logs.webhooks.get(data.target_id) ||
-        new Webhook(
-          guild.client,
-          this.changes.reduce(
-            (o, c) => {
-              o[c.key] = c.new || c.old;
-              return o;
-            },
-            {
-              id: data.target_id,
-              guild_id: guild.id,
-            },
-          ),
-        );
-    } else if (targetType === Targets.INVITE) {
-      this.target = guild.members.fetch(guild.client.user.id).then(me => {
-        if (me.permissions.has(Permissions.FLAGS.MANAGE_GUILD)) {
-          const change = this.changes.find(c => c.key === 'code');
-          return guild.fetchInvites().then(invites => {
-            this.target = invites.find(i => i.code === (change.new || change.old));
-          });
-        } else {
-          this.target = this.changes.reduce((o, c) => {
-            o[c.key] = c.new || c.old;
-            return o;
-          }, {});
-          return this.target;
-        }
-      });
-    } else if (targetType === Targets.MESSAGE) {
-      // Discord sends a channel id for the MESSAGE_BULK_DELETE action type.
-      this.target =
-        data.action_type === Actions.MESSAGE_BULK_DELETE
-          ? guild.channels.cache.get(data.target_id) || { id: data.target_id }
-          : guild.client.users.cache.get(data.target_id);
-    } else if (targetType === Targets.INTEGRATION) {
-      this.target =
-        logs.integrations.get(data.target_id) ||
-        new Integration(
-          guild.client,
-          this.changes.reduce(
-            (o, c) => {
-              o[c.key] = c.new || c.old;
-              return o;
-            },
-            { id: data.target_id },
-          ),
-          guild,
-        );
-    } else if (data.target_id) {
-      this.target = guild[`${targetType.toLowerCase()}s`].cache.get(data.target_id) || { id: data.target_id };
+    const target = GuildAuditLogs.targetType(data.action_type);
+    if (((target === Targets.USER || target === Targets.MESSAGE) && data.action_type !== Actions.MESSAGE_BULK_DELETE) && data.target_id && !this.target) {
+      this.target = guild.client.users.add(logs._users.find(t => t.id === data.target_id) || { id: data.target_id }, false);
+    } else if (target === Targets.GUILD && !this.target) {
+      this.target = guild.client.guilds.add({ id: data.target_id }, false);
     }
   }
 

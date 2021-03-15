@@ -13,6 +13,7 @@ docs/deploy/deploy_key
 docs/deploy/deploy_key.pub
 deploy/deploy_key
 deploy/deploy_key.pub
+.sessions
 
 # Miscellaneous
 .tmp/

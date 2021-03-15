@@ -21,6 +21,8 @@ const Intents = require("../util/Intents");
 const Permissions = require("../util/Permissions");
 const Structures = require("../util/Structures");
 const SnowflakeUtil = require("../util/Snowflake");
+const fs = require("fs");
+const Guild = require("../structures/Guild");
 
 /**
  * The main hub for interacting with the Discord API, and the starting point for any bot.
@@ -96,18 +98,15 @@ class Client extends BaseClient {
      */
     this.presence = new ClientPresence(this, options.presence);
 
-    Object.defineProperty(this, "token", { writable: true });
-    if (!this.token && "DISCORD_TOKEN" in process.env) {
-      /**
-       * Authorization token for the logged in bot.
-       * If present, this defaults to `process.env.DISCORD_TOKEN` when instantiating the client
-       * <warn>This should be kept private at all times.</warn>
-       * @type {?string}
-       */
-      this.token = process.env.DISCORD_TOKEN;
-    } else {
-      this.token = null;
-    }
+    /**
+     * Authorization token for the logged in bot.
+     * <warn>This should be kept private at all times.</warn>
+     * @type {?string}
+     */
+    Object.defineProperty(this, "token", {
+      writable: true,
+      value: null
+    });
 
     /**
      * User that the client is logged in as
@@ -126,13 +125,16 @@ class Client extends BaseClient {
       this.setInterval(this.sweepMessages.bind(this), this.options.messageSweepInterval * 1000);
     }
 
-    if (options.hotreload) {
+    if (options.hotReload) {
+      this.cacheFilePath = `${process.cwd()}/.sessions`;
       this.ws._hotreload = {};
+
       if (options.sessionID && options.sequence) {
         if (!Array.isArray(options.sessionID) && !Array.isArray(options.sequence)) {
           options.sessionID = [ options.sessionID ];
           options.sequence = [ options.sequence ];
         }
+
         for (let shard = 0; shard < options.sessionID.length; shard++) {
           this.ws._hotreload[shard] = {
             id: options.sessionID[shard],
@@ -141,10 +143,29 @@ class Client extends BaseClient {
         }
       } else {
         try {
-          this.ws._hotreload = JSON.parse(fs.readFileSync(`${process.cwd()}/.sessions.json`, "utf8"));
+          this.ws._hotreload = JSON.parse(fs.readFileSync(`${this.cacheFilePath}/sessions.json`, "utf8"));
         } catch (e) {
           this.ws._hotreload = {};
         }
+      }
+
+      try {
+        for (const toCache of options.restoreCache) {
+          const data = JSON.parse(fs.readFileSync(`${this.cacheFilePath}/${toCache}.json`, "utf8"));
+          switch (toCache) {
+            case "guilds": {
+              data.cache.forEach(i => {
+                console.log(i);
+                this.guilds.cache.set(i.id, new Guild(this, i));
+                console.log(i.id);
+              });
+
+              break;
+            }
+          }
+        }
+      } catch (e) {
+        // Do nothing
       }
 
       this.on(Events.SHARD_RESUME, () => {
@@ -155,8 +176,12 @@ class Client extends BaseClient {
 
       for (const eventType of [ "exit", "uncaughtException", "SIGINT", "SIGTERM" ]) {
         process.on(eventType, () => {
+          if (!fs.existsSync(this.cacheFilePath)) {
+            fs.mkdirSync(this.cacheFilePath);
+          }
+
           try {
-            this.ws._hotreload = JSON.parse(fs.readFileSync(`${process.cwd()}/.sessions.json`, "utf8"));
+            this.ws._hotreload = JSON.parse(fs.readFileSync(`${this.cacheFilePath}/sessions.json`, "utf8"));
           } catch (e) {
             this.ws._hotreload = {};
           }
@@ -171,7 +196,13 @@ class Client extends BaseClient {
             };
           }));
 
-          fs.writeFileSync(`${process.cwd()}/.sessions.json`, JSON.stringify(this.ws._hotreload));
+          fs.writeFileSync(`${this.cacheFilePath}/sessions.json`, JSON.stringify(this.ws._hotreload));
+          if (options.restoreCache) {
+            for (const toCache of options.restoreCache) {
+              fs.writeFileSync(`${this.cacheFilePath}/${toCache}.json`, JSON.stringify(this[toCache]));
+            }
+          }
+
           if (eventType !== "exit") {
             process.exit();
           }

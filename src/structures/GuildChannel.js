@@ -29,11 +29,18 @@ class GuildChannel extends Channel {
   constructor(guild, data) {
     super(guild.client, data);
 
-    /**
-     * The guild the channel is in
-     * @type {Guild}
-     */
-    this.guild = guild;
+    if (this.client.doCache("guilds")) {
+      this.guild = guild;
+    } else {
+      const { shardID, id } = guild;
+      Reflect.defineProperty(this, "guild", {
+        enumerable: false,
+        get() {
+          return guild.client.guilds.cache.get(id)
+            ?? guild.client.guilds.add({ id, shardID }, false);
+        }
+      })
+    }
   }
 
   _patch(data) {
@@ -84,8 +91,12 @@ class GuildChannel extends Channel {
    * @readonly
    */
   get permissionsLocked() {
-    if (!this.parent) return null;
-    if (this.permissionOverwrites.size !== this.parent.permissionOverwrites.size) return false;
+    if (!this.parent) {
+      return null;
+    }
+    if (this.permissionOverwrites.size !== this.parent.permissionOverwrites.size) {
+      return false;
+    }
     return this.permissionOverwrites.every((value, key) => {
       const testVal = this.parent.permissionOverwrites.get(key);
       return (
@@ -113,15 +124,23 @@ class GuildChannel extends Channel {
    */
   permissionsFor(memberOrRole) {
     const member = this.guild.members.resolve(memberOrRole);
-    if (member) return this.memberPermissions(member);
+    if (member) {
+      return this.memberPermissions(member);
+    }
     const role = this.guild.roles.resolve(memberOrRole);
-    if (role) return this.rolePermissions(role);
+    if (role) {
+      return this.rolePermissions(role);
+    }
     return null;
   }
 
   overwritesFor(member, verified = false, roles = null) {
-    if (!verified) member = this.guild.members.resolve(member);
-    if (!member) return [];
+    if (!verified) {
+      member = this.guild.members.resolve(member);
+    }
+    if (!member) {
+      return [];
+    }
 
     roles = roles || member.roles.cache;
     const roleOverwrites = [];
@@ -152,12 +171,16 @@ class GuildChannel extends Channel {
    * @private
    */
   memberPermissions(member) {
-    if (member.id === this.guild.ownerID) return new Permissions(Permissions.ALL).freeze();
+    if (member.id === this.guild.ownerID) {
+      return new Permissions(Permissions.ALL).freeze();
+    }
 
     const roles = member.roles.cache;
     const permissions = new Permissions(roles.map(role => role.permissions));
 
-    if (permissions.has(Permissions.FLAGS.ADMINISTRATOR)) return new Permissions(Permissions.ALL).freeze();
+    if (permissions.has(Permissions.FLAGS.ADMINISTRATOR)) {
+      return new Permissions(Permissions.ALL).freeze();
+    }
 
     const overwrites = this.overwritesFor(member, true, roles);
 
@@ -178,7 +201,9 @@ class GuildChannel extends Channel {
    * @private
    */
   rolePermissions(role) {
-    if (role.permissions.has(Permissions.FLAGS.ADMINISTRATOR)) return new Permissions(Permissions.ALL).freeze();
+    if (role.permissions.has(Permissions.FLAGS.ADMINISTRATOR)) {
+      return new Permissions(Permissions.ALL).freeze();
+    }
 
     const everyoneOverwrites = this.permissionOverwrites.get(this.guild.id);
     const roleOverwrites = this.permissionOverwrites.get(role.id);
@@ -229,7 +254,9 @@ class GuildChannel extends Channel {
    */
   async updateOverwrite(userOrRole, options, reason) {
     userOrRole = this.guild.roles.resolve(userOrRole) || this.client.users.resolve(userOrRole);
-    if (!userOrRole) return Promise.reject(new TypeError('INVALID_TYPE', 'parameter', 'User nor a Role'));
+    if (!userOrRole) {
+      return Promise.reject(new TypeError('INVALID_TYPE', 'parameter', 'User nor a Role'));
+    }
 
     const existing = this.permissionOverwrites.get(userOrRole.id);
     if (existing) {
@@ -256,7 +283,9 @@ class GuildChannel extends Channel {
    */
   createOverwrite(userOrRole, options, reason) {
     userOrRole = this.guild.roles.resolve(userOrRole) || this.client.users.resolve(userOrRole);
-    if (!userOrRole) return Promise.reject(new TypeError('INVALID_TYPE', 'parameter', 'User nor a Role'));
+    if (!userOrRole) {
+      return Promise.reject(new TypeError('INVALID_TYPE', 'parameter', 'User nor a Role'));
+    }
 
     const type = userOrRole instanceof Role ? OverwriteTypes.role : OverwriteTypes.member;
     const { allow, deny } = PermissionOverwrites.resolveOverwriteOptions(options);
@@ -281,7 +310,9 @@ class GuildChannel extends Channel {
    * @returns {Promise<GuildChannel>}
    */
   lockPermissions() {
-    if (!this.parent) return Promise.reject(new Error('GUILD_CHANNEL_ORPHAN'));
+    if (!this.parent) {
+      return Promise.reject(new Error('GUILD_CHANNEL_ORPHAN'));
+    }
     const permissionOverwrites = this.parent.permissionOverwrites.map(overwrite => overwrite.toJSON());
     return this.edit({ permissionOverwrites });
   }
@@ -548,6 +579,7 @@ class GuildChannel extends Channel {
     );
     return this.guild.channels.create(options.name, options);
   }
+
   /* eslint-enable max-len */
 
   /**
@@ -582,7 +614,16 @@ class GuildChannel extends Channel {
    * @readonly
    */
   get deletable() {
-    return this.permissionsFor(this.client.user).has(Permissions.FLAGS.MANAGE_CHANNELS, false);
+    if (this.deleted) {
+      return false;
+    }
+
+    if (!this.client.doCache("roles") && !this.guild.roles.cache.size) {
+      return false;
+    }
+
+    return this.permissionsFor(this.client.user)
+      .has(Permissions.FLAGS.MANAGE_CHANNELS, false);
   }
 
   /**
@@ -591,7 +632,9 @@ class GuildChannel extends Channel {
    * @readonly
    */
   get manageable() {
-    if (this.client.user.id === this.guild.ownerID) return true;
+    if (this.client.user.id === this.guild.ownerID) {
+      return true;
+    }
     if (this.type === 'voice') {
       if (!this.permissionsFor(this.client.user).has(Permissions.FLAGS.CONNECT, false)) {
         return false;
@@ -608,9 +651,13 @@ class GuildChannel extends Channel {
    * @readonly
    */
   get viewable() {
-    if (this.client.user.id === this.guild.ownerID) return true;
+    if (this.client.user.id === this.guild.ownerID) {
+      return true;
+    }
     const permissions = this.permissionsFor(this.client.user);
-    if (!permissions) return false;
+    if (!permissions) {
+      return false;
+    }
     return permissions.has(Permissions.FLAGS.VIEW_CHANNEL, false);
   }
 
