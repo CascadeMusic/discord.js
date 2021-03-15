@@ -12,7 +12,8 @@ let zlib;
 
 try {
   zlib = require('zlib-sync');
-} catch {} // eslint-disable-line no-empty
+} catch {
+} // eslint-disable-line no-empty
 
 /**
  * Represents a Shard's WebSocket connection
@@ -276,14 +277,18 @@ class WebSocketShard extends EventEmitter {
    */
   onMessage({ data }) {
     let raw;
-    if (data instanceof ArrayBuffer) data = new Uint8Array(data);
+    if (data instanceof ArrayBuffer) {
+      data = new Uint8Array(data);
+    }
     if (zlib) {
       const l = data.length;
       const flush =
         l >= 4 && data[l - 4] === 0x00 && data[l - 3] === 0x00 && data[l - 2] === 0xff && data[l - 1] === 0xff;
 
       this.inflate.push(data, flush && zlib.Z_SYNC_FLUSH);
-      if (!flush) return;
+      if (!flush) {
+        return;
+      }
       raw = this.inflate.result;
     } else {
       raw = data;
@@ -292,7 +297,9 @@ class WebSocketShard extends EventEmitter {
     try {
       packet = WebSocket.unpack(raw);
       this.manager.client.emit(Events.RAW, packet, this.id);
-      if (packet.op === OPCodes.DISPATCH) this.manager.emit(packet.t, packet.d, this.id);
+      if (packet.op === OPCodes.DISPATCH) {
+        this.manager.emit(packet.t, packet.d, this.id);
+      }
     } catch (err) {
       this.manager.client.emit(Events.SHARD_ERROR, err, this.id);
       return;
@@ -307,7 +314,9 @@ class WebSocketShard extends EventEmitter {
    */
   onError(event) {
     const error = event && event.error ? event.error : event;
-    if (!error) return;
+    if (!error) {
+      return;
+    }
 
     /**
      * Emitted whenever a shard's WebSocket encounters a connection error.
@@ -339,7 +348,9 @@ class WebSocketShard extends EventEmitter {
    * @private
    */
   onClose(event) {
-    if (this.sequence !== -1) this.closeSequence = this.sequence;
+    if (this.sequence !== -1) {
+      this.closeSequence = this.sequence;
+    }
     this.sequence = -1;
 
     this.debug(`[CLOSE]
@@ -350,7 +361,9 @@ class WebSocketShard extends EventEmitter {
     this.setHeartbeatTimer(-1);
     this.setHelloTimeout(-1);
     // If we still have a connection object, clean up its listeners
-    if (this.connection) this._cleanupConnection();
+    if (this.connection) {
+      this._cleanupConnection();
+    }
 
     this.status = Status.DISCONNECTED;
 
@@ -405,7 +418,9 @@ class WebSocketShard extends EventEmitter {
       }
     }
 
-    if (packet.s > this.sequence) this.sequence = packet.s;
+    if (packet.s > this.sequence) {
+      this.sequence = packet.s;
+    }
 
     switch (packet.op) {
       case OPCodes.HELLO:
@@ -448,6 +463,21 @@ class WebSocketShard extends EventEmitter {
     }
   }
 
+  emitReady() {
+    this.debug("ready");
+    this.status = Status.READY;
+
+    /**
+     * Emitted when the shard is fully ready.
+     * This event is emitted if:
+     * * all guilds were received by this shard
+     * * the ready timeout expired, and some guilds are unavailable
+     * @event WebSocketShard#allReady
+     * @param {?Set<string>} unavailableGuilds Set of unavailable guilds, if any
+     */
+    this.emit(ShardEvents.ALL_READY, this.expectedGuilds.size || void 0);
+  }
+
   /**
    * Checks if the shard can be marked as ready
    * @private
@@ -456,34 +486,22 @@ class WebSocketShard extends EventEmitter {
     // Step 0. Clear the ready timeout, if it exists
     if (this.readyTimeout) {
       this.manager.client.clearTimeout(this.readyTimeout);
-      this.readyTimeout = null;
+      this.readyTimeout = void 0;
     }
+
     // Step 1. If we don't have any other guilds pending, we are ready
     if (!this.expectedGuilds.size) {
-      this.debug('Shard received all its guilds. Marking as fully ready.');
-      this.status = Status.READY;
-
-      /**
-       * Emitted when the shard is fully ready.
-       * This event is emitted if:
-       * * all guilds were received by this shard
-       * * the ready timeout expired, and some guilds are unavailable
-       * @event WebSocketShard#allReady
-       * @param {?Set<string>} unavailableGuilds Set of unavailable guilds, if any
-       */
-      this.emit(ShardEvents.ALL_READY);
+      this.debug("Shard received all its guilds, marking as ready.");
+      this.emitReady();
       return;
     }
+
     // Step 2. Create a 15s timeout that will mark the shard as ready if there are still unavailable guilds
     this.readyTimeout = this.manager.client.setTimeout(() => {
-      this.debug(`Shard did not receive any more guild packets in 15 seconds.
-  Unavailable guild count: ${this.expectedGuilds.size}`);
+      this.debug(`Shard did not receive any more guilds in 15 seconds, marking as ready. ${this.expectedGuilds.size} guilds are unavailable`);
+      this.emitReady();
 
-      this.readyTimeout = null;
-
-      this.status = Status.READY;
-
-      this.emit(ShardEvents.ALL_READY, this.expectedGuilds);
+      delete this.readyTimeout;
     }, 15000);
   }
 
@@ -524,7 +542,9 @@ class WebSocketShard extends EventEmitter {
     }
     this.debug(`Setting a heartbeat interval for ${time}ms.`);
     // Sanity checks
-    if (this.heartbeatInterval) this.manager.client.clearInterval(this.heartbeatInterval);
+    if (this.heartbeatInterval) {
+      this.manager.client.clearInterval(this.heartbeatInterval);
+    }
     this.heartbeatInterval = this.manager.client.setInterval(() => this.sendHeartbeat(), time);
   }
 
@@ -537,7 +557,7 @@ class WebSocketShard extends EventEmitter {
    */
   sendHeartbeat(
     tag = 'HeartbeatTimer',
-    ignoreHeartbeatAck = [Status.WAITING_FOR_GUILDS, Status.IDENTIFYING, Status.RESUMING].includes(this.status),
+    ignoreHeartbeatAck = [ Status.WAITING_FOR_GUILDS, Status.IDENTIFYING, Status.RESUMING ].includes(this.status),
   ) {
     if (ignoreHeartbeatAck && !this.lastHeartbeatAcked) {
       this.debug(`[${tag}] Didn't process heartbeat ack yet but we are still connected. Sending one now.`);
@@ -576,6 +596,15 @@ class WebSocketShard extends EventEmitter {
    * @returns {void}
    */
   identify() {
+    if (this.manager.client.options.hotreload && this.manager._hotreload) {
+      const data = this.manager._hotreload[this.id];
+      if (data && !this.sessionID) {
+        this.sessionID = data.id;
+        this.closeSequence = this.sequence = data.seq;
+        delete this.manager._hotreload[this.id];
+      }
+    }
+
     return this.sessionID ? this.identifyResume() : this.identifyNew();
   }
 
@@ -597,7 +626,7 @@ class WebSocketShard extends EventEmitter {
       ...client.options.ws,
       intents: Intents.resolve(client.options.intents),
       token: client.token,
-      shard: [this.id, Number(client.options.shardCount)],
+      shard: [ this.id, Number(client.options.shardCount) ],
     };
 
     this.debug(`[IDENTIFY] Shard ${this.id}/${client.options.shardCount}`);
@@ -655,7 +684,9 @@ class WebSocketShard extends EventEmitter {
     }
 
     this.connection.send(WebSocket.pack(data), err => {
-      if (err) this.manager.client.emit(Events.SHARD_ERROR, err, this.id);
+      if (err) {
+        this.manager.client.emit(Events.SHARD_ERROR, err, this.id);
+      }
     });
   }
 
@@ -665,8 +696,12 @@ class WebSocketShard extends EventEmitter {
    * @private
    */
   processQueue() {
-    if (this.ratelimit.remaining === 0) return;
-    if (this.ratelimit.queue.length === 0) return;
+    if (this.ratelimit.remaining === 0) {
+      return;
+    }
+    if (this.ratelimit.queue.length === 0) {
+      return;
+    }
     if (this.ratelimit.remaining === this.ratelimit.total) {
       this.ratelimit.timer = this.manager.client.setTimeout(() => {
         this.ratelimit.remaining = this.ratelimit.total;
@@ -675,7 +710,9 @@ class WebSocketShard extends EventEmitter {
     }
     while (this.ratelimit.remaining > 0) {
       const item = this.ratelimit.queue.shift();
-      if (!item) return;
+      if (!item) {
+        return;
+      }
       this._send(item);
       this.ratelimit.remaining--;
     }
@@ -715,7 +752,9 @@ class WebSocketShard extends EventEmitter {
           // No-op
         }
         // Emit the destroyed event if needed
-        if (emit) this._emitDestroyed();
+        if (emit) {
+          this._emitDestroyed();
+        }
       }
     } else if (emit) {
       // We requested a destroy, but we had no connection. Emit destroyed
@@ -729,7 +768,9 @@ class WebSocketShard extends EventEmitter {
     this.status = Status.DISCONNECTED;
 
     // Step 4: Cache the old sequence (use to attempt a resume)
-    if (this.sequence !== -1) this.closeSequence = this.sequence;
+    if (this.sequence !== -1) {
+      this.closeSequence = this.sequence;
+    }
 
     // Step 5: Reset the sequence and session ID if requested
     if (reset) {

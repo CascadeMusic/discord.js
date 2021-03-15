@@ -1,8 +1,6 @@
 'use strict';
 
 const Action = require('./Action');
-const { Events } = require('../../util/Constants');
-const { PartialTypes } = require('../../util/Constants');
 
 /*
 { user_id: 'id',
@@ -16,39 +14,29 @@ const { PartialTypes } = require('../../util/Constants');
 
 class MessageReactionAdd extends Action {
   handle(data) {
-    if (!data.emoji) return false;
+    const client = this.client;
 
-    const user = this.getUserFromMember(data);
-    if (!user) return false;
+    let channel = data.channel;
+    if (!channel) {
+      const guild = data.guild_id ? this.getGuild(data) : void 0;
+      channel = this.getChannel(data, guild)
+    }
 
-    // Verify channel
-    const channel = this.getChannel(data);
-    if (!channel || channel.type === 'voice') return false;
+    const user = data.user || client.users.cache.get(data.user_id) || (data.member && data.member.user ? client.users.add(data.member.user, client.options.cacheMembers) : client.users.add({ id: data.user_id }, false)),
+      message = data.message || channel.messages.cache.get(data.message_id) || channel.messages.add({ id: data.message_id }, false),
+      reaction = message.reactions.cache.get(data.emoji.id || data.emoji.name) || message.reactions.add({
+        emoji: data.emoji,
+        count: null,
+        me: null
+      }, channel.messages.cache.has(data.message_id));
 
-    // Verify message
-    const message = this.getMessage(data, channel);
-    if (!message) return false;
+    reaction.me = data.user_id === client.user.id;
+    if (channel.messages.cache.has(message.id)) {
+      reaction.users.cache.set(user.id, user);
+      reaction.count = reaction.users.cache.size;
+    }
 
-    // Verify reaction
-    if (message.partial && !this.client.options.partials.includes(PartialTypes.REACTION)) return false;
-    const existing = message.reactions.cache.get(data.emoji.id || data.emoji.name);
-    if (existing && existing.users.cache.has(user.id)) return { message, reaction: existing, user };
-    const reaction = message.reactions.add({
-      emoji: data.emoji,
-      count: message.partial ? null : 0,
-      me: user.id === this.client.user.id,
-    });
-    if (!reaction) return false;
-    reaction._add(user);
-    /**
-     * Emitted whenever a reaction is added to a cached message.
-     * @event Client#messageReactionAdd
-     * @param {MessageReaction} messageReaction The reaction object
-     * @param {User} user The user that applied the guild or reaction emoji
-     */
-    this.client.emit(Events.MESSAGE_REACTION_ADD, reaction, user);
-
-    return { message, reaction, user };
+    return { message, reaction, user }
   }
 }
 

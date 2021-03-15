@@ -2,56 +2,55 @@
 
 const Action = require('./Action');
 const { Events } = require('../../util/Constants');
-const textBasedChannelTypes = ['dm', 'text', 'news'];
+const textBasedChannelTypes = [ 'dm', 'text', 'news' ];
 
 class TypingStart extends Action {
   handle(data) {
-    const channel = this.getChannel(data);
-    if (!channel) {
-      return;
-    }
-    if (!textBasedChannelTypes.includes(channel.type)) {
-      this.client.emit(Events.WARN, `Discord sent a typing packet to a ${channel.type} channel ${channel.id}`);
-      return;
-    }
+    const client = this.client,
+      guild = data.guild_id ? this.getGuild(data) : void 0,
+      channel = this.getChannel(data, guild)
 
-    const user = this.getUserFromMember(data);
-    const timestamp = new Date(data.timestamp * 1000);
+    let user = client.users.cache.get(data.user_id);
+    if (user) {
+      if (data.member) {
+        if (data.member.user && data.member.user.username && !user.equals(data.member.user)) {
+          client.actions.UserUpdate.handle(data.member.user);
+        }
 
-    if (channel && user) {
-      if (channel._typing.has(user.id)) {
-        const typing = channel._typing.get(user.id);
-
-        typing.lastTimestamp = timestamp;
-        typing.elapsedTime = Date.now() - typing.since;
-        this.client.clearTimeout(typing.timeout);
-        typing.timeout = this.tooLate(channel, user);
-      } else {
-        const since = new Date();
-        const lastTimestamp = new Date();
-        channel._typing.set(user.id, {
-          user,
-          since,
-          lastTimestamp,
-          elapsedTime: Date.now() - since,
-          timeout: this.tooLate(channel, user),
-        });
-
-        /**
-         * Emitted whenever a user starts typing in a channel.
-         * @event Client#typingStart
-         * @param {Channel} channel The channel the user started typing in
-         * @param {User} user The user that started typing
-         */
-        this.client.emit(Events.TYPING_START, channel, user);
+        const member = guild.members.cache.get(data.user_id);
+        if (member) {
+          member._update(data.member);
+        } else {
+          guild.members.add(data.member);
+        }
       }
+    } else {
+      user = data.member && data.member.user ? client.users.add(data.member.user, client.options.cacheMembers) : client.users.add({ id: data.user_id }, false);
     }
+
+    const timestamp = new Date(data.timestamp * 1000);
+    if (channel._typing.has(user.id)) {
+      const typing = channel._typing.get(user.id);
+      typing.lastTimestamp = timestamp;
+      typing.elapsedTime = Date.now() - typing.since;
+
+      client.clearTimeout(typing.timeout);
+      typing.timeout = this.tooLate(channel, user);
+    } else {
+      channel._typing.set(user.id, {
+        user,
+        since: new Date(),
+        lastTimestamp: new Date(),
+        elapsedTime: 0,
+        timeout: this.tooLate(channel, user)
+      });
+    }
+
+    client.emit(Events.TYPING_START, channel, user);
   }
 
   tooLate(channel, user) {
-    return channel.client.setTimeout(() => {
-      channel._typing.delete(user.id);
-    }, 10000);
+    return channel.client.setTimeout(() => channel._typing.delete(user.id), 10000);
   }
 }
 

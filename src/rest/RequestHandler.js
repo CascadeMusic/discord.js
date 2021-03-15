@@ -95,6 +95,16 @@ class RequestHandler {
       return this.execute(request);
     }
 
+    if (this.client.listenerCount("rest")) {
+      this.client.emit("rest", {
+        path: this.path,
+        method: this.method,
+        response: this.client.options.restEventIncludeBuffer
+          ? await response.clone().buffer()
+          : null
+      });
+    }
+
     if (res && res.headers) {
       const serverDate = res.headers.get('date');
       const limit = res.headers.get('x-ratelimit-limit');

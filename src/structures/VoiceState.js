@@ -32,41 +32,53 @@ class VoiceState extends Base {
      * @type {?boolean}
      */
     this.serverDeaf = 'deaf' in data ? data.deaf : null;
+
     /**
      * Whether this member is muted server-wide
      * @type {?boolean}
      */
     this.serverMute = 'mute' in data ? data.mute : null;
+
     /**
      * Whether this member is self-deafened
      * @type {?boolean}
      */
     this.selfDeaf = 'self_deaf' in data ? data.self_deaf : null;
+
     /**
      * Whether this member is self-muted
      * @type {?boolean}
      */
     this.selfMute = 'self_mute' in data ? data.self_mute : null;
+
     /**
      * Whether this member's camera is enabled
      * @type {?boolean}
      */
     this.selfVideo = 'self_video' in data ? data.self_video : null;
+
     /**
      * The session ID of this member's connection
      * @type {?string}
      */
     this.sessionID = 'session_id' in data ? data.session_id : null;
+
     /**
      * Whether this member is streaming using "Go Live"
      * @type {boolean}
      */
     this.streaming = data.self_stream || false;
+
     /**
      * The ID of the voice channel that this member is in
      * @type {?Snowflake}
      */
     this.channelID = data.channel_id || null;
+
+    if (data.member && data.member.user && !this.guild.members.cache.has(data.member.user.id)) {
+      this._member = data.member;
+    }
+
     return this;
   }
 
@@ -76,7 +88,8 @@ class VoiceState extends Base {
    * @readonly
    */
   get member() {
-    return this.guild.members.cache.get(this.id) || null;
+    return this.guild.members.cache.get(this.id)
+      || this.guild.members.add(this._member || { user: { id: this.id } }, false);
   }
 
   /**
@@ -85,7 +98,10 @@ class VoiceState extends Base {
    * @readonly
    */
   get channel() {
-    return this.guild.channels.cache.get(this.channelID) || null;
+    return this.channelID
+      ? this.client.channels.cache.get(this.channelID)
+      || this.client.channels.add({ id: this.channelID, type: 2 }, this.guild, false)
+      : null;
   }
 
   /**
@@ -94,7 +110,9 @@ class VoiceState extends Base {
    * @readonly
    */
   get connection() {
-    if (this.id !== this.client.user.id) return null;
+    if (this.id !== this.client.user.id) {
+      return null;
+    }
     return this.client.voice.connections.get(this.guild.id) || null;
   }
 
@@ -117,23 +135,15 @@ class VoiceState extends Base {
   }
 
   /**
-   * Whether this member is currently speaking. A boolean if the information is available (aka
-   * the bot is connected to any voice channel in the guild), otherwise this is null
-   * @type {?boolean}
-   * @readonly
-   */
-  get speaking() {
-    return this.channel && this.channel.connection ? Boolean(this.channel.connection._speaking.get(this.id)) : null;
-  }
-
-  /**
    * Mutes/unmutes the member of this voice state.
    * @param {boolean} mute Whether or not the member should be muted
    * @param {string} [reason] Reason for muting or unmuting
    * @returns {Promise<GuildMember>}
    */
   setMute(mute, reason) {
-    return this.member ? this.member.edit({ mute }, reason) : Promise.reject(new Error('VOICE_STATE_UNCACHED_MEMBER'));
+    return this.member
+      ? this.member.edit({ mute }, reason)
+      : Promise.reject(new Error('VOICE_STATE_UNCACHED_MEMBER'));
   }
 
   /**
@@ -143,7 +153,9 @@ class VoiceState extends Base {
    * @returns {Promise<GuildMember>}
    */
   setDeaf(deaf, reason) {
-    return this.member ? this.member.edit({ deaf }, reason) : Promise.reject(new Error('VOICE_STATE_UNCACHED_MEMBER'));
+    return this.member
+      ? this.member.edit({ deaf }, reason)
+      : Promise.reject(new Error('VOICE_STATE_UNCACHED_MEMBER'));
   }
 
   /**
@@ -166,34 +178,6 @@ class VoiceState extends Base {
     return this.member
       ? this.member.edit({ channel }, reason)
       : Promise.reject(new Error('VOICE_STATE_UNCACHED_MEMBER'));
-  }
-
-  /**
-   * Self-mutes/unmutes the bot for this voice state.
-   * @param {boolean} mute Whether or not the bot should be self-muted
-   * @returns {Promise<boolean>} true if the voice state was successfully updated, otherwise false
-   */
-  async setSelfMute(mute) {
-    if (this.id !== this.client.user.id) throw new Error('VOICE_STATE_NOT_OWN');
-    if (typeof mute !== 'boolean') throw new TypeError('VOICE_STATE_INVALID_TYPE', 'mute');
-    if (!this.connection) return false;
-    this.selfMute = mute;
-    await this.connection.sendVoiceStateUpdate();
-    return true;
-  }
-
-  /**
-   * Self-deafens/undeafens the bot for this voice state.
-   * @param {boolean} deaf Whether or not the bot should be self-deafened
-   * @returns {Promise<boolean>} true if the voice state was successfully updated, otherwise false
-   */
-  async setSelfDeaf(deaf) {
-    if (this.id !== this.client.user.id) return new Error('VOICE_STATE_NOT_OWN');
-    if (typeof deaf !== 'boolean') return new TypeError('VOICE_STATE_INVALID_TYPE', 'deaf');
-    if (!this.connection) return false;
-    this.selfDeaf = deaf;
-    await this.connection.sendVoiceStateUpdate();
-    return true;
   }
 
   toJSON() {

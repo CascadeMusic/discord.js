@@ -71,7 +71,9 @@ class MessageMentions {
         this.roles = new Collection();
         for (const mention of roles) {
           const role = message.channel.guild.roles.cache.get(mention);
-          if (role) this.roles.set(role.id, role);
+          if (role) {
+            this.roles.set(role.id, role);
+          }
         }
       }
     } else {
@@ -134,14 +136,30 @@ class MessageMentions {
    * @readonly
    */
   get members() {
-    if (this._members) return this._members;
-    if (!this.guild) return null;
-    this._members = new Collection();
-    this.users.forEach(user => {
-      const member = this.guild.members.resolve(user);
-      if (member) this._members.set(member.user.id, member);
-    });
-    return this._members;
+    if (!this.guild) {
+      return null;
+    }
+
+    if (!this._members) {
+      this._members = [];
+    }
+
+    const members = new Collection();
+    for (const id of this.users.keys()) {
+      let m = this.guild.members.cache.get(id);
+      if (!m) {
+        const data = this._members.find(member => member.user.id === id);
+        if (!data) {
+          continue;
+        }
+
+        m = this.guild.members.add(data, false);
+      }
+
+      members.set(id, m);
+    }
+
+    return members;
   }
 
   /**
@@ -151,13 +169,16 @@ class MessageMentions {
    * @readonly
    */
   get channels() {
-    if (this._channels) return this._channels;
     this._channels = new Collection();
+
     let matches;
     while ((matches = this.constructor.CHANNELS_PATTERN.exec(this._content)) !== null) {
-      const chan = this.client.channels.cache.get(matches[1]);
-      if (chan) this._channels.set(chan.id, chan);
+      const chan = this.client.channels.cache.get(matches[1])
+        ?? this.client.channels.add({ id: matches[1], type: this.guild ? 0 : 1 }, this.guild, false);
+
+      this._channels.set(chan.id, chan);
     }
+
     return this._channels;
   }
 
@@ -172,10 +193,16 @@ class MessageMentions {
    * @returns {boolean}
    */
   has(data, { ignoreDirect = false, ignoreRoles = false, ignoreEveryone = false } = {}) {
-    if (!ignoreEveryone && this.everyone) return true;
+    if (!ignoreEveryone && this.everyone) {
+      return true;
+    }
     const GuildMember = require('./GuildMember');
     if (!ignoreRoles && data instanceof GuildMember) {
-      for (const role of this.roles.values()) if (data.roles.cache.has(role.id)) return true;
+      for (const role of this.roles.values()) {
+        if (data.roles.cache.has(role.id)) {
+          return true;
+        }
+      }
     }
 
     if (!ignoreDirect) {

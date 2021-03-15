@@ -59,7 +59,7 @@ class GuildTemplate extends Base {
      * The user that created this template
      * @type {User}
      */
-    this.creator = this.client.users.add(data.creator);
+    this.creator = this.client.users.add(data.creator, this.client.users.has(data.creator.id));
 
     /**
      * The time of when this template was created at

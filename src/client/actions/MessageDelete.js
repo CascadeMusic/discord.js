@@ -1,27 +1,23 @@
 'use strict';
 
 const Action = require('./Action');
-const { Events } = require('../../util/Constants');
 
 class MessageDeleteAction extends Action {
   handle(data) {
-    const client = this.client;
-    const channel = this.getChannel(data);
-    let message;
-    if (channel) {
-      message = this.getMessage(data, channel);
-      if (message) {
-        channel.messages.cache.delete(message.id);
-        message.deleted = true;
-        /**
-         * Emitted whenever a message is deleted.
-         * @event Client#messageDelete
-         * @param {Message} message The deleted message
-         */
-        client.emit(Events.MESSAGE_DELETE, message);
-      }
+    const guild = data.guild_id ? this.getGuild(data) : void 0,
+      channel = this.getChannel(data, guild);
+
+    let message = channel.messages.cache.get(data.id);
+    if (message) {
+      channel.messages.cache.delete(message.id);
+    } else {
+      message = channel.messages.add(data, false);
+      message.system = null;
+      message.createdTimestamp = null;
+      message.author = null;
     }
 
+    message.deleted = true;
     return { message };
   }
 }

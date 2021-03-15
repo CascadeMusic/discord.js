@@ -36,6 +36,7 @@ class VoiceChannel extends GuildChannel {
         coll.set(state.id, state.member);
       }
     }
+
     return coll;
   }
 
@@ -72,10 +73,19 @@ class VoiceChannel extends GuildChannel {
    * @readonly
    */
   get joinable() {
-    if (!this.viewable) return false;
-    if (!this.permissionsFor(this.client.user).has(Permissions.FLAGS.CONNECT, false)) return false;
-    if (this.full && !this.permissionsFor(this.client.user).has(Permissions.FLAGS.MOVE_MEMBERS, false)) return false;
-    return true;
+    if ((!this.guild.roles.cache.size && !this.client.doCache("roles")) || (!this.permissionOverwrites.size && !this.client.options.cacheOverwrites)) {
+      return true;
+    }
+
+    if (!this.viewable) {
+      return false;
+    }
+
+    if (!this.permissionsFor(this.client.user).has(Permissions.FLAGS.CONNECT, false)) {
+      return false;
+    }
+
+    return !(this.full && !this.permissionsFor(this.client.user).has(Permissions.FLAGS.MOVE_MEMBERS, false));
   }
 
   /**
@@ -85,36 +95,6 @@ class VoiceChannel extends GuildChannel {
    */
   get speakable() {
     return this.permissionsFor(this.client.user).has(Permissions.FLAGS.SPEAK, false);
-  }
-
-  /**
-   * Sets the bitrate of the channel.
-   * @param {number} bitrate The new bitrate
-   * @param {string} [reason] Reason for changing the channel's bitrate
-   * @returns {Promise<VoiceChannel>}
-   * @example
-   * // Set the bitrate of a voice channel
-   * voiceChannel.setBitrate(48000)
-   *   .then(vc => console.log(`Set bitrate to ${vc.bitrate}bps for ${vc.name}`))
-   *   .catch(console.error);
-   */
-  setBitrate(bitrate, reason) {
-    return this.edit({ bitrate }, reason);
-  }
-
-  /**
-   * Sets the user limit of the channel.
-   * @param {number} userLimit The new user limit
-   * @param {string} [reason] Reason for changing the user limit
-   * @returns {Promise<VoiceChannel>}
-   * @example
-   * // Set the user limit of a voice channel
-   * voiceChannel.setUserLimit(42)
-   *   .then(vc => console.log(`Set user limit to ${vc.userLimit} for ${vc.name}`))
-   *   .catch(console.error);
-   */
-  setUserLimit(userLimit, reason) {
-    return this.edit({ userLimit }, reason);
   }
 }
 

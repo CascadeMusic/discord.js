@@ -3,6 +3,8 @@
 const Base = require('./Base');
 const { Endpoints } = require('../util/Constants');
 const Permissions = require('../util/Permissions');
+const Guild = require("./Guild");
+const Channel = require("./Channel");
 
 /**
  * Represents an invitation to a guild channel.
@@ -20,7 +22,9 @@ class Invite extends Base {
      * The guild the invite is for
      * @type {?Guild}
      */
-    this.guild = data.guild ? this.client.guilds.add(data.guild, false) : null;
+    this.guild = data.guild instanceof Guild
+      ? data.guild
+      : this.client.guilds.add(data.guild, false);
 
     /**
      * The code for this invite
@@ -68,13 +72,17 @@ class Invite extends Base {
      * The user who created this invite
      * @type {?User}
      */
-    this.inviter = data.inviter ? this.client.users.add(data.inviter) : null;
+    this.inviter = data.inviter
+      ? this.client.users.add(data.inviter, this.client.users.cache.has(data.inviter.id))
+      : null;
 
     /**
      * The target user for this invite
      * @type {?User}
      */
-    this.targetUser = data.target_user ? this.client.users.add(data.target_user) : null;
+    this.targetUser = data.target_user
+      ? this.client.users.add(data.target_user, this.client.users.cache.has(data.target_user.id))
+      : null;
 
     /**
      * The type of the target user:
@@ -92,7 +100,9 @@ class Invite extends Base {
      * The channel the invite is for
      * @type {Channel}
      */
-    this.channel = this.client.channels.add(data.channel, this.guild, false);
+    this.channel = data.channel instanceof Channel
+      ? data.channel
+      : this.client.channels.add(data.channel, this.guild, false);
 
     /**
      * The timestamp the invite was created at
@@ -117,8 +127,12 @@ class Invite extends Base {
    */
   get deletable() {
     const guild = this.guild;
-    if (!guild || !this.client.guilds.cache.has(guild.id)) return false;
-    if (!guild.me) throw new Error('GUILD_UNCACHED_ME');
+    if (!guild || !this.client.guilds.cache.has(guild.id)) {
+      return false;
+    }
+    if (!guild.me) {
+      throw new Error('GUILD_UNCACHED_ME');
+    }
     return (
       this.channel.permissionsFor(this.client.user).has(Permissions.FLAGS.MANAGE_CHANNELS, false) ||
       guild.me.permissions.has(Permissions.FLAGS.MANAGE_GUILD)

@@ -13,6 +13,14 @@ class ClientPresence extends Presence {
     super(client, Object.assign(data, { status: data.status || 'online', user: { id: null } }));
   }
 
+  get user() {
+    return this.client.user;
+  }
+
+  get member() {
+    return null;
+  }
+
   set(presence) {
     const packet = this._parse(presence);
     this.patch(packet);
@@ -35,14 +43,21 @@ class ClientPresence extends Presence {
       since: typeof since === 'number' && !Number.isNaN(since) ? since : null,
       status: status || this.status,
     };
+
     if (activities === null) {
       data.activities = null;
       return data;
     }
+
     if (activities && activities.length) {
-      for (const [i, activity] of activities.entries()) {
-        if (typeof activity.name !== 'string') throw new TypeError('INVALID_TYPE', `activities[${i}].name`, 'string');
-        if (!activity.type) activity.type = 0;
+      for (const [ i, activity ] of activities.entries()) {
+        if (typeof activity.name !== 'string') {
+          throw new TypeError('INVALID_TYPE', `activities[${i}].name`, 'string');
+        }
+
+        if (!activity.type) {
+          activity.type = 0;
+        }
 
         data.activities.push({
           type: typeof activity.type === 'number' ? activity.type : ActivityTypes.indexOf(activity.type),

@@ -3,9 +3,10 @@
 const Base = require('./Base');
 const { ChannelTypes } = require('../util/Constants');
 const Snowflake = require('../util/Snowflake');
+const Structures = require("../util/Structures");
 
 /**
- * Represents any channel on Discord.
+ * Represents any channel on
  * @extends {Base}
  * @abstract
  */
@@ -33,7 +34,9 @@ class Channel extends Base {
      */
     this.deleted = false;
 
-    if (data) this._patch(data);
+    if (data) {
+      this._patch(data);
+    }
   }
 
   _patch(data) {
@@ -106,50 +109,60 @@ class Channel extends Base {
     return 'messages' in this;
   }
 
-  static create(client, data, guild) {
-    const Structures = require('../util/Structures');
-    let channel;
+  static create(client, data, _guild) {
+    let channel,
+      guild = _guild;
+
     if (!data.guild_id && !guild) {
       if ((data.recipients && data.type !== ChannelTypes.GROUP) || data.type === ChannelTypes.DM) {
-        const DMChannel = Structures.get('DMChannel');
+        const DMChannel = Structures.get("DMChannel");
         channel = new DMChannel(client, data);
       } else if (data.type === ChannelTypes.GROUP) {
         const PartialGroupDMChannel = require('./PartialGroupDMChannel');
         channel = new PartialGroupDMChannel(client, data);
       }
     } else {
-      guild = guild || client.guilds.cache.get(data.guild_id);
+      if (!(guild instanceof Guild)) {
+        guild = client.guilds.cache.get(data.guild_id) || client.guilds.add({
+          id: data.guild_id,
+          shardID: data.shardID
+        }, false);
+      }
       if (guild) {
         switch (data.type) {
           case ChannelTypes.TEXT: {
-            const TextChannel = Structures.get('TextChannel');
+            const TextChannel = Structures.get("TextChannel");
             channel = new TextChannel(guild, data);
             break;
           }
+
           case ChannelTypes.VOICE: {
-            const VoiceChannel = Structures.get('VoiceChannel');
+            const VoiceChannel = Structures.get("VoiceChannel");
             channel = new VoiceChannel(guild, data);
             break;
           }
+
           case ChannelTypes.CATEGORY: {
-            const CategoryChannel = Structures.get('CategoryChannel');
+            const CategoryChannel = Structures.get("CategoryChannel");
             channel = new CategoryChannel(guild, data);
             break;
           }
+
           case ChannelTypes.NEWS: {
-            const NewsChannel = Structures.get('NewsChannel');
+            const NewsChannel = Structures.get("NewsChannel");
             channel = new NewsChannel(guild, data);
             break;
           }
+
           case ChannelTypes.STORE: {
-            const StoreChannel = Structures.get('StoreChannel');
+            const StoreChannel = Structures.get("StoreChannel");
             channel = new StoreChannel(guild, data);
             break;
           }
         }
-        if (channel) guild.channels.cache.set(channel.id, channel);
       }
     }
+
     return channel;
   }
 

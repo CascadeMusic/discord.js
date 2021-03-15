@@ -24,6 +24,15 @@ class PresenceManager extends BaseManager {
   }
 
   /**
+   * Creates a data-less instance of Presence
+   * @param {string} userId User Id
+   * @returns {Presence}
+   */
+  forge(userId) {
+    return this.add({ user: { id: userId } }, false)
+  }
+
+  /**
    * Data that can be resolved to a Presence object. This can be:
    * * A Presence
    * * A UserResolvable

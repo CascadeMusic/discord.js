@@ -1,42 +1,34 @@
 'use strict';
 
 const Action = require('./Action');
-const { Status, Events } = require('../../util/Constants');
+const { Events } = require('../../util/Constants');
 
 class GuildMemberUpdateAction extends Action {
   handle(data, shard) {
-    const { client } = this;
+    const client = this.client;
     if (data.user.username) {
       const user = client.users.cache.get(data.user.id);
       if (!user) {
-        client.users.add(data.user);
+        if (client.doCache("members")) {
+          client.users.add(data.user);
+        }
       } else if (!user.equals(data.user)) {
-        client.actions.UserUpdate.handle(data.user);
+        const { old, updated } = client.actions.UserUpdate.handle(data.user);
+        client.emit(Events.USER_UPDATE, old, updated);
       }
     }
 
-    const guild = client.guilds.cache.get(data.guild_id);
-    if (guild) {
-      const member = this.getMember({ user: data.user }, guild);
-      if (member) {
-        const old = member._update(data);
-        /**
-         * Emitted whenever a guild member changes - i.e. new role, removed role, nickname.
-         * Also emitted when the user's details (e.g. username) change.
-         * @event Client#guildMemberUpdate
-         * @param {GuildMember} oldMember The member before the update
-         * @param {GuildMember} newMember The member after the update
-         */
-        if (shard.status === Status.READY) client.emit(Events.GUILD_MEMBER_UPDATE, old, member);
-      } else {
-        const newMember = guild.members.add(data);
-        /**
-         * Emitted whenever a member becomes available in a large guild.
-         * @event Client#guildMemberAvailable
-         * @param {GuildMember} member The member that became available
-         */
-        this.client.emit(Events.GUILD_MEMBER_AVAILABLE, newMember);
+    const guild = this.getGuild(data);
+
+    let member = guild.members.cache.get(data.user.id);
+    if (member) {
+      const old = member._update(data);
+      if (!member.equals(old)) {
+        client.emit(Events.GUILD_MEMBER_UPDATE, old, member);
       }
+    } else {
+      member = guild.members.add(data, client.users.cache.has(data.user.id));
+      client.emit(Events.GUILD_MEMBER_UPDATE, null, member);
     }
   }
 }

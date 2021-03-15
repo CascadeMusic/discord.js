@@ -21,7 +21,7 @@ class GuildEmojiManager extends BaseGuildEmojiManager {
   }
 
   add(data, cache) {
-    return super.add(data, cache, { extras: [this.guild] });
+    return super.add(data, cache, { extras: [ this.guild ] });
   }
 
   /**
@@ -45,7 +45,9 @@ class GuildEmojiManager extends BaseGuildEmojiManager {
    */
   async create(attachment, name, { roles, reason } = {}) {
     attachment = await DataResolver.resolveImage(attachment);
-    if (!attachment) throw new TypeError('REQ_RESOURCE_TYPE');
+    if (!attachment) {
+      throw new TypeError('REQ_RESOURCE_TYPE');
+    }
 
     const data = { image: attachment, name };
     if (roles) {
@@ -68,6 +70,15 @@ class GuildEmojiManager extends BaseGuildEmojiManager {
   }
 
   /**
+   * Creates a data-less instance of GuildEmoji
+   * @param {string} id Emoji ID
+   * @returns {GuildEmoji}
+   */
+  forge(id) {
+    return this.add({ id }, false);
+  }
+
+  /**
    * Obtains one or more emojis from Discord, or the emoji cache if they're already available.
    * @param {Snowflake} [id] ID of the emoji
    * @param {boolean} [cache=true] Whether to cache the new emoji objects if it weren't already
@@ -84,20 +95,58 @@ class GuildEmojiManager extends BaseGuildEmojiManager {
    *   .then(emoji => console.log(`The emoji name is: ${emoji.name}`))
    *   .catch(console.error);
    */
-  async fetch(id, cache = true, force = false) {
-    if (id) {
-      if (!force) {
-        const existing = this.cache.get(id);
-        if (existing) return existing;
-      }
-      const emoji = await this.client.api.guilds(this.guild.id).emojis(id).get();
-      return this.add(emoji, cache);
+  async fetch(id, cache = true) {
+    let options = {};
+    switch (typeof cache) {
+      case "boolean":
+        options.cache = cache;
+        break;
+      case "object":
+        options = cache || {};
+        break;
     }
 
-    const data = await this.client.api.guilds(this.guild.id).emojis.get();
-    const emojis = new Collection();
-    for (const emoji of data) emojis.set(emoji.id, this.add(emoji, cache));
-    return emojis;
+    switch (typeof id) {
+      case "string":
+        options.id = id;
+        break;
+      case "boolean":
+        options.cache = id;
+        break;
+      case "object":
+        options = id || {};
+        break;
+    }
+
+    if (typeof options.cache === "undefined") {
+      options.cache = true;
+    }
+
+    if (options.id) {
+      const existing = this.cache.get(options.id);
+      if (!options.force && existing) {
+        return existing;
+      }
+
+      const emoji = await this.client.api.guilds(this.guild.id).emojis(options.id).get();
+      return this.add(emoji, options.cache);
+    }
+
+    const emojis = await this.client.api.guilds(this.guild.id).emojis().get();
+    if (options.cache) {
+      for (const emoji of emojis) {
+        this.add(emoji);
+      }
+
+      return this.cache;
+    }
+
+    const collection = new Discord.Collection();
+    for (const emoji of emojis) {
+      collection.set(emoji.id, this.add(emoji, false));
+    }
+
+    return collection;
   }
 }
 

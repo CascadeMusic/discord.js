@@ -36,6 +36,7 @@ const { Error, RangeError } = require('../errors');
  * @property {HTTPOptions} [http] HTTP options
  */
 exports.DefaultOptions = {
+  cache: [ "members", "presences", "emojis", "roles", "overwrites", "channels", "guilds" ],
   shardCount: 1,
   messageCacheMaxSize: 200,
   messageCacheLifetime: 0,
@@ -94,15 +95,22 @@ exports.WSCodes = {
   4014: 'DISALLOWED_INTENTS',
 };
 
-const AllowedImageFormats = ['webp', 'png', 'jpg', 'jpeg', 'gif'];
+const AllowedImageFormats = [ 'webp', 'png', 'jpg', 'jpeg', 'gif' ];
 
 const AllowedImageSizes = Array.from({ length: 9 }, (e, i) => 2 ** (i + 4));
 
 function makeImageUrl(root, { format = 'webp', size } = {}) {
-  if (format && !AllowedImageFormats.includes(format)) throw new Error('IMAGE_FORMAT', format);
-  if (size && !AllowedImageSizes.includes(size)) throw new RangeError('IMAGE_SIZE', size);
+  if (format && !AllowedImageFormats.includes(format)) {
+    throw new Error('IMAGE_FORMAT', format);
+  }
+
+  if (size && !AllowedImageSizes.includes(size)) {
+    throw new RangeError('IMAGE_SIZE', size);
+  }
+
   return `${root}.${format}${size ? `?size=${size}` : ''}`;
 }
+
 /**
  * Options for Image URLs.
  * @typedef {Object} ImageURLOptions
@@ -120,13 +128,17 @@ exports.Endpoints = {
       Asset: name => `${root}/assets/${name}`,
       DefaultAvatar: discriminator => `${root}/embed/avatars/${discriminator}.png`,
       Avatar: (userID, hash, format = 'webp', size, dynamic = false) => {
-        if (dynamic) format = hash.startsWith('a_') ? 'gif' : format;
+        if (dynamic) {
+          format = hash.startsWith('a_') ? 'gif' : format;
+        }
         return makeImageUrl(`${root}/avatars/${userID}/${hash}`, { format, size });
       },
       Banner: (guildID, hash, format = 'webp', size) =>
         makeImageUrl(`${root}/banners/${guildID}/${hash}`, { format, size }),
       Icon: (guildID, hash, format = 'webp', size, dynamic = false) => {
-        if (dynamic) format = hash.startsWith('a_') ? 'gif' : format;
+        if (dynamic) {
+          format = hash.startsWith('a_') ? 'gif' : format;
+        }
         return makeImageUrl(`${root}/icons/${guildID}/${hash}`, { format, size });
       },
       AppIcon: (clientID, hash, { format = 'webp', size } = {}) =>
@@ -294,7 +306,7 @@ exports.ShardEvents = {
  * sidebar for more information.</warn>
  * @typedef {string} PartialType
  */
-exports.PartialTypes = keyMirror(['USER', 'CHANNEL', 'GUILD_MEMBER', 'MESSAGE', 'REACTION']);
+exports.PartialTypes = keyMirror([ 'USER', 'CHANNEL', 'GUILD_MEMBER', 'MESSAGE', 'REACTION' ]);
 
 /**
  * The type of a websocket message event, e.g. `MESSAGE_CREATE`. Here are the available events:
@@ -467,7 +479,7 @@ exports.SystemMessageTypes = exports.MessageTypes.filter(type => type && type !=
  * * COMPETING
  * @typedef {string} ActivityType
  */
-exports.ActivityTypes = ['PLAYING', 'STREAMING', 'LISTENING', 'WATCHING', 'CUSTOM_STATUS', 'COMPETING'];
+exports.ActivityTypes = [ 'PLAYING', 'STREAMING', 'LISTENING', 'WATCHING', 'CUSTOM_STATUS', 'COMPETING' ];
 
 exports.ChannelTypes = {
   TEXT: 0,
@@ -523,7 +535,7 @@ exports.Colors = {
  * * ALL_MEMBERS
  * @typedef {string} ExplicitContentFilterLevel
  */
-exports.ExplicitContentFilterLevels = ['DISABLED', 'MEMBERS_WITHOUT_ROLES', 'ALL_MEMBERS'];
+exports.ExplicitContentFilterLevels = [ 'DISABLED', 'MEMBERS_WITHOUT_ROLES', 'ALL_MEMBERS' ];
 
 /**
  * The value set for the verification levels for a guild:
@@ -534,7 +546,7 @@ exports.ExplicitContentFilterLevels = ['DISABLED', 'MEMBERS_WITHOUT_ROLES', 'ALL
  * * VERY_HIGH
  * @typedef {string} VerificationLevel
  */
-exports.VerificationLevels = ['NONE', 'LOW', 'MEDIUM', 'HIGH', 'VERY_HIGH'];
+exports.VerificationLevels = [ 'NONE', 'LOW', 'MEDIUM', 'HIGH', 'VERY_HIGH' ];
 
 /**
  * An error encountered while performing an API request. Here are the potential errors:
@@ -681,7 +693,7 @@ exports.APIErrors = {
  * * MENTIONS
  * @typedef {string} DefaultMessageNotifications
  */
-exports.DefaultMessageNotifications = ['ALL', 'MENTIONS'];
+exports.DefaultMessageNotifications = [ 'ALL', 'MENTIONS' ];
 
 /**
  * The value set for a team members's membership state:
@@ -715,18 +727,22 @@ exports.WebhookTypes = [
  * * member
  * @typedef {string} OverwriteType
  */
-exports.OverwriteTypes = createEnum(['role', 'member']);
+exports.OverwriteTypes = createEnum([ 'role', 'member' ]);
 
 function keyMirror(arr) {
   let tmp = Object.create(null);
-  for (const value of arr) tmp[value] = value;
+  for (const value of arr) {
+    tmp[value] = value;
+  }
   return tmp;
 }
 
 function createEnum(keys) {
   const obj = {};
-  for (const [index, key] of keys.entries()) {
-    if (key === null) continue;
+  for (const [ index, key ] of keys.entries()) {
+    if (key === null) {
+      continue;
+    }
     obj[key] = index;
     obj[index] = key;
   }

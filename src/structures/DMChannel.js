@@ -34,7 +34,7 @@ class DMChannel extends Channel {
        * The recipient on the other end of the DM
        * @type {User}
        */
-      this.recipient = this.client.users.add(data.recipients[0]);
+      this.recipient = this.client.users.add(data.recipients[0], this.client.users.cache.has(data.recipients[0].id));
     }
 
     /**
@@ -82,18 +82,36 @@ class DMChannel extends Channel {
 
   // These are here only for documentation purposes - they are implemented by TextBasedChannel
   /* eslint-disable no-empty-function */
-  get lastMessage() {}
-  get lastPinAt() {}
-  send() {}
-  startTyping() {}
-  stopTyping() {}
-  get typing() {}
-  get typingCount() {}
-  createMessageCollector() {}
-  awaitMessages() {}
+  get lastMessage() {
+  }
+
+  get lastPinAt() {
+  }
+
+  send() {
+  }
+
+  startTyping() {
+  }
+
+  stopTyping() {
+  }
+
+  get typing() {
+  }
+
+  get typingCount() {
+  }
+
+  createMessageCollector() {
+  }
+
+  awaitMessages() {
+  }
+
   // Doesn't work on DM channels; bulkDelete() {}
 }
 
-TextBasedChannel.applyToClass(DMChannel, true, ['bulkDelete']);
+TextBasedChannel.applyToClass(DMChannel, true, [ 'bulkDelete' ]);
 
 module.exports = DMChannel;

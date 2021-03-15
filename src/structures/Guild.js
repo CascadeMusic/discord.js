@@ -28,6 +28,7 @@ const DataResolver = require('../util/DataResolver');
 const Snowflake = require('../util/Snowflake');
 const SystemChannelFlags = require('../util/SystemChannelFlags');
 const Util = require('../util/Util');
+const Intents = require("../util/Intents");
 
 /**
  * Represents a guild (or a server) on Discord.
@@ -79,7 +80,9 @@ class Guild extends Base {
      */
     this.deleted = false;
 
-    if (!data) return;
+    if (!data) {
+      return;
+    }
     if (data.unavailable) {
       /**
        * Whether the guild is available to access. If it is not available, it indicates a server outage
@@ -94,7 +97,9 @@ class Guild extends Base {
       this.id = data.id;
     } else {
       this._patch(data);
-      if (!data.channels) this.available = false;
+      if (!data.channels) {
+        this.available = false;
+      }
     }
 
     /**
@@ -378,23 +383,6 @@ class Guild extends Base {
      */
     this.preferredLocale = data.preferred_locale;
 
-    if (data.channels) {
-      this.channels.cache.clear();
-      for (const rawChannel of data.channels) {
-        this.client.channels.add(rawChannel, this);
-      }
-    }
-
-    if (data.roles) {
-      this.roles.cache.clear();
-      for (const role of data.roles) this.roles.add(role);
-    }
-
-    if (data.members) {
-      this.members.cache.clear();
-      for (const guildUser of data.members) this.members.add(guildUser);
-    }
-
     if (data.owner_id) {
       /**
        * The user ID of this guild's owner
@@ -403,31 +391,67 @@ class Guild extends Base {
       this.ownerID = data.owner_id;
     }
 
-    if (data.presences) {
-      for (const presence of data.presences) {
-        this.presences.add(Object.assign(presence, { guild: this }));
+    if (Array.isArray(data.channels)) {
+      if (this.client.doCache("channels") && data.channels.length) {
+        this.channels.cache.clear();
+      }
+
+      for (const channel of data.channels) {
+        if (this.client.doCache("channels") || this.client.channels.cache.has(channel.id)) {
+          this.client.channels.add(channel, this);
+        }
       }
     }
 
-    if (data.voice_states) {
+    if (Array.isArray(data.roles) && (this.roles.cache.size || this.client.doCache("roles"))) {
+      this.roles.cache.clear();
+
+      for (const role of data.roles) {
+        this.roles.add(role);
+      }
+    }
+
+    if (Array.isArray(data.members)) {
+      for (const member of data.members) {
+        if (this.client.users.cache.has(member.user.id) || this.client.doCache("members")) {
+          this.members.add(member);
+        }
+      }
+
+      if (!this.members.cache.has(this.client.user.id)) {
+        this.members.fetch(this.client.user.id).catch(() => {
+        });
+      }
+    }
+
+    if (Array.isArray(data.presences)) {
+      for (const presence of data.presences) {
+        if (this.client.users.cache.has(presence.user.id) || this.client.doCache("presences")) {
+          this.presences.add(Object.assign(presence, { guild: this }));
+        }
+      }
+    }
+
+    if (Array.isArray(data.voice_states) && (!this.client.options.intents || (this.client.options.intents & Intents.FLAGS.GUILD_VOICE_STATES))) {
       this.voiceStates.cache.clear();
       for (const voiceState of data.voice_states) {
         this.voiceStates.add(voiceState);
       }
     }
 
-    if (!this.emojis) {
-      /**
-       * A manager of the emojis belonging to this guild
-       * @type {GuildEmojiManager}
-       */
-      this.emojis = new GuildEmojiManager(this);
-      if (data.emojis) for (const emoji of data.emojis) this.emojis.add(emoji);
-    } else if (data.emojis) {
-      this.client.actions.GuildEmojisUpdate.handle({
-        guild_id: this.id,
-        emojis: data.emojis,
-      });
+    if (Array.isArray(data.emojis)) {
+      const emojis = Boolean(this.emojis);
+
+      if (emojis) {
+        this.client.actions.GuildEmojisUpdate.handle({
+          guild_id: this.id,
+          emojis: data.emojis
+        });
+      } else if (this.client.options.cacheEmojis) {
+        for (const emoji of data.emojis) {
+          this.emojis.add(emoji);
+        }
+      }
     }
   }
 
@@ -437,7 +461,9 @@ class Guild extends Base {
    * @returns {?string}
    */
   bannerURL({ format, size } = {}) {
-    if (!this.banner) return null;
+    if (!this.banner) {
+      return null;
+    }
     return this.client.rest.cdn.Banner(this.id, this.banner, format, size);
   }
 
@@ -465,7 +491,7 @@ class Guild extends Base {
    * @readonly
    */
   get joinedAt() {
-    return new Date(this.joinedTimestamp);
+    return this.joinedTimestamp && new Date(this.joinedTimestamp);
   }
 
   /**
@@ -492,7 +518,9 @@ class Guild extends Base {
    * @returns {?string}
    */
   iconURL({ format, size, dynamic } = {}) {
-    if (!this.icon) return null;
+    if (!this.icon) {
+      return null;
+    }
     return this.client.rest.cdn.Icon(this.id, this.icon, format, size, dynamic);
   }
 
@@ -503,9 +531,9 @@ class Guild extends Base {
    */
   get nameAcronym() {
     return this.name
-      .replace(/'s /g, ' ')
-      .replace(/\w+/g, e => e[0])
-      .replace(/\s/g, '');
+      ?.replace(/'s /g, ' ')
+      ?.replace(/\w+/g, e => e[0])
+      ?.replace(/\s/g, '');
   }
 
   /**
@@ -514,7 +542,10 @@ class Guild extends Base {
    * @returns {?string}
    */
   splashURL({ format, size } = {}) {
-    if (!this.splash) return null;
+    if (!this.splash) {
+      return null;
+    }
+
     return this.client.rest.cdn.Splash(this.id, this.splash, format, size);
   }
 
@@ -524,7 +555,10 @@ class Guild extends Base {
    * @returns {?string}
    */
   discoverySplashURL({ format, size } = {}) {
-    if (!this.discoverySplash) return null;
+    if (!this.discoverySplash) {
+      return null;
+    }
+
     return this.client.rest.cdn.DiscoverySplash(this.id, this.discoverySplash, format, size);
   }
 
@@ -534,12 +568,8 @@ class Guild extends Base {
    * @readonly
    */
   get owner() {
-    return (
-      this.members.cache.get(this.ownerID) ||
-      (this.client.options.partials.includes(PartialTypes.GUILD_MEMBER)
-        ? this.members.add({ user: { id: this.ownerID } }, true)
-        : null)
-    );
+    return this.members.cache.get(this.ownerID)
+      ?? this.members.add({ user: { id: this.ownerID } }, false);
   }
 
   /**
@@ -629,14 +659,17 @@ class Guild extends Base {
    */
   fetchBan(user) {
     const id = this.client.users.resolveID(user);
-    if (!id) throw new Error('FETCH_BAN_RESOLVE_ID');
+    if (!id) {
+      throw new Error('FETCH_BAN_RESOLVE_ID');
+    }
+
     return this.client.api
       .guilds(this.id)
       .bans(id)
       .get()
       .then(ban => ({
         reason: ban.reason,
-        user: this.client.users.add(ban.user),
+        user: this.client.users.add(ban.user, this.client.doCache("members") || this.client.users.cache.has(ban.user.id))
       }));
   }
 
@@ -650,12 +683,12 @@ class Guild extends Base {
       .bans.get()
       .then(bans =>
         bans.reduce((collection, ban) => {
-          collection.set(ban.user.id, {
+          return collection.set(ban.user.id, {
             reason: ban.reason,
-            user: this.client.users.add(ban.user),
-          });
-          return collection;
-        }, new Collection()),
+            user: this.client.users.add(ban.user, this.client.doCache("members")
+              || this.client.users.cache.has(ban.user.id))
+          })
+        }, new Collection())
       );
   }
 
@@ -825,7 +858,9 @@ class Guild extends Base {
       .webhooks.get()
       .then(data => {
         const hooks = new Collection();
-        for (const hook of data) hooks.set(hook.id, new Webhook(this.client, hook));
+        for (const hook of data) {
+          hooks.set(hook.id, new Webhook(this.client, hook));
+        }
         return hooks;
       });
   }
@@ -840,7 +875,9 @@ class Guild extends Base {
       .regions.get()
       .then(res => {
         const regions = new Collection();
-        for (const region of res) regions.set(region.id, new VoiceRegion(region));
+        for (const region of res) {
+          regions.set(region.id, new VoiceRegion(region));
+        }
         return regions;
       });
   }
@@ -869,13 +906,16 @@ class Guild extends Base {
    *   .catch(console.error);
    */
   async fetchWidget() {
-    const data = await this.client.api.guilds(this.id).widget.get();
-    this.widgetEnabled = data.enabled;
-    this.widgetChannelID = data.channel_id;
-    return {
-      enabled: data.enabled,
-      channel: data.channel_id ? this.channels.cache.get(data.channel_id) : null,
-    };
+    return this.client.api
+      .guilds(this.id)
+      .widget.get()
+      .then(data => ({
+        enabled: data.enabled,
+        channel: data.channel_id
+          ? this.channels.cache.get(data.channel_id)
+          || this.client.channels.add({ id: data.channel_id, type: 0 }, this, false)
+          : null
+      }));
   }
 
   /**
@@ -893,19 +933,23 @@ class Guild extends Base {
    *   .catch(console.error);
    */
   fetchAuditLogs(options = {}) {
-    if (options.before && options.before instanceof GuildAuditLogs.Entry) options.before = options.before.id;
-    if (typeof options.type === 'string') options.type = GuildAuditLogs.Actions[options.type];
+    if (options.before && options.before instanceof GuildAuditLogs.Entry) {
+      options.before = options.before.id;
+    }
+    if (typeof options.type === 'string') {
+      options.type = GuildAuditLogs.Actions[options.type];
+    }
 
     return this.client.api
       .guilds(this.id)
       ['audit-logs'].get({
-        query: {
-          before: options.before,
-          limit: options.limit,
-          user_id: this.client.users.resolveID(options.user),
-          action_type: options.type,
-        },
-      })
+      query: {
+        before: options.before,
+        limit: options.limit,
+        user_id: this.client.users.resolveID(options.user),
+        action_type: options.type,
+      },
+    })
       .then(data => GuildAuditLogs.build(this, data));
   }
 
@@ -924,8 +968,12 @@ class Guild extends Base {
    */
   async addMember(user, options) {
     user = this.client.users.resolveID(user);
-    if (!user) throw new TypeError('INVALID_TYPE', 'user', 'UserResolvable');
-    if (this.members.cache.has(user)) return this.members.cache.get(user);
+    if (!user) {
+      throw new TypeError('INVALID_TYPE', 'user', 'UserResolvable');
+    }
+    if (this.members.cache.has(user)) {
+      return this.members.cache.get(user);
+    }
     options.access_token = options.accessToken;
     if (options.roles) {
       const roles = [];
@@ -981,8 +1029,12 @@ class Guild extends Base {
    */
   edit(data, reason) {
     const _data = {};
-    if (data.name) _data.name = data.name;
-    if (data.region) _data.region = data.region;
+    if (data.name) {
+      _data.name = data.name;
+    }
+    if (data.region) {
+      _data.region = data.region;
+    }
     if (typeof data.verificationLevel !== 'undefined') {
       _data.verification_level =
         typeof data.verificationLevel === 'number'
@@ -995,12 +1047,24 @@ class Guild extends Base {
     if (typeof data.systemChannel !== 'undefined') {
       _data.system_channel_id = this.client.channels.resolveID(data.systemChannel);
     }
-    if (data.afkTimeout) _data.afk_timeout = Number(data.afkTimeout);
-    if (typeof data.icon !== 'undefined') _data.icon = data.icon;
-    if (data.owner) _data.owner_id = this.client.users.resolveID(data.owner);
-    if (data.splash) _data.splash = data.splash;
-    if (data.discoverySplash) _data.discovery_splash = data.discoverySplash;
-    if (data.banner) _data.banner = data.banner;
+    if (data.afkTimeout) {
+      _data.afk_timeout = Number(data.afkTimeout);
+    }
+    if (typeof data.icon !== 'undefined') {
+      _data.icon = data.icon;
+    }
+    if (data.owner) {
+      _data.owner_id = this.client.users.resolveID(data.owner);
+    }
+    if (data.splash) {
+      _data.splash = data.splash;
+    }
+    if (data.discoverySplash) {
+      _data.discovery_splash = data.discoverySplash;
+    }
+    if (data.banner) {
+      _data.banner = data.banner;
+    }
     if (typeof data.explicitContentFilter !== 'undefined') {
       _data.explicit_content_filter =
         typeof data.explicitContentFilter === 'number'
@@ -1022,7 +1086,9 @@ class Guild extends Base {
     if (typeof data.publicUpdatesChannel !== 'undefined') {
       _data.public_updates_channel_id = this.client.channels.resolveID(data.publicUpdatesChannel);
     }
-    if (data.preferredLocale) _data.preferred_locale = data.preferredLocale;
+    if (data.preferredLocale) {
+      _data.preferred_locale = data.preferredLocale;
+    }
     return this.client.api
       .guilds(this.id)
       .patch({ data: _data, reason })
@@ -1049,6 +1115,7 @@ class Guild extends Base {
   setDefaultMessageNotifications(defaultMessageNotifications, reason) {
     return this.edit({ defaultMessageNotifications }, reason);
   }
+
   /* eslint-enable max-len */
 
   /**
@@ -1371,7 +1438,9 @@ class Guild extends Base {
    *   .catch(console.error);
    */
   leave() {
-    if (this.ownerID === this.client.user.id) return Promise.reject(new Error('GUILD_OWNED'));
+    if (this.ownerID === this.client.user.id) {
+      return Promise.reject(new Error('GUILD_OWNED'));
+    }
     return this.client.api
       .users('@me')
       .guilds(this.id)
@@ -1469,8 +1538,8 @@ class Guild extends Base {
     return Util.discordSort(
       this.channels.cache.filter(
         c =>
-          (['text', 'news', 'store'].includes(channel.type)
-            ? ['text', 'news', 'store'].includes(c.type)
+          ([ 'text', 'news', 'store' ].includes(channel.type)
+            ? [ 'text', 'news', 'store' ].includes(c.type)
             : c.type === channel.type) &&
           (category || c.parent === channel.parent),
       ),

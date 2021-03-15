@@ -3,17 +3,16 @@
 const { Events, Status } = require('../../../util/Constants');
 
 module.exports = (client, { d: data }, shard) => {
+  data.shardID = shard.id;
+
   let guild = client.guilds.cache.get(data.id);
   if (guild) {
     if (!guild.available && !data.unavailable) {
-      // A newly available guild
       guild._patch(data);
     }
   } else {
-    // A new guild
-    data.shardID = shard.id;
-    guild = client.guilds.add(data);
-    if (client.ws.status === Status.READY) {
+    guild = client.guilds.add(data, client.doCache("guilds"));
+    if (client.ws.status === Status.READY || !client.doCache("guilds")) {
       /**
        * Emitted whenever the client joins a guild.
        * @event Client#guildCreate
@@ -23,3 +22,5 @@ module.exports = (client, { d: data }, shard) => {
     }
   }
 };
+
+

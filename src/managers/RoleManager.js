@@ -27,7 +27,16 @@ class RoleManager extends BaseManager {
    */
 
   add(data, cache) {
-    return super.add(data, cache, { extras: [this.guild] });
+    return super.add(data, cache, { extras: [ this.guild ] });
+  }
+
+  /**
+   * Creates a data-less instance of Role
+   * @param {string} id Role Id
+   * @returns {Role}
+   */
+  forge(id) {
+    return this.add({ id }, false)
   }
 
   /**
@@ -47,17 +56,62 @@ class RoleManager extends BaseManager {
    *   .then(role => console.log(`The role color is: ${role.color}`))
    *   .catch(console.error);
    */
-  async fetch(id, cache = true, force = false) {
-    if (id && !force) {
-      const existing = this.cache.get(id);
-      if (existing) return existing;
+  async fetch(id, cache = true) {
+    let options = {};
+    switch (typeof cache) {
+      case "boolean":
+        options.cache = cache;
+        break;
+      case "object":
+        options = cache || {};
+        break;
     }
 
-    // We cannot fetch a single role, as of this commit's date, Discord API throws with 405
-    const data = await this.client.api.guilds(this.guild.id).roles.get();
-    const roles = new Collection();
-    for (const role of data) roles.set(role.id, this.add(role, cache));
-    return id ? roles.get(id) ?? null : roles;
+    switch (typeof id) {
+      case "string":
+        options.id = id;
+        break;
+      case "boolean":
+        options.cache = id;
+        break;
+      case "object":
+        options = id || {};
+        break;
+    }
+
+    if (typeof options.cache === "undefined") {
+      options.cache = true;
+    }
+
+    if (options.id) {
+      const existing = this.cache.get(options.id);
+      if (!options.force && existing) {
+        return existing;
+      }
+    }
+
+    const roles = await this.client.api.guilds(this.guild.id).roles.get();
+    if (options.id) {
+      const r = roles.find(t => t.id === options.id);
+      if (!r) {
+        throw new Discord.DiscordAPIError(`${this.client.api.guilds(this.guild.id).roles()}:id`, { message: "Unknown Role" }, "GET", 404);
+      }
+
+      return this.add(r, options.cache);
+    } else if (options.cache) {
+      for (const role of roles) {
+        this.add(role);
+      }
+
+      return this.cache;
+    }
+
+    const collection = new Discord.Collection();
+    for (const role of roles) {
+      collection.set(role.id, this.add(role, false));
+    }
+
+    return collection;
   }
 
   /**
@@ -114,8 +168,12 @@ class RoleManager extends BaseManager {
    */
   create(options = {}) {
     let { name, color, hoist, permissions, position, mentionable, reason } = options;
-    if (color) color = resolveColor(color);
-    if (permissions) permissions = Permissions.resolve(permissions).toString();
+    if (color) {
+      color = resolveColor(color);
+    }
+    if (permissions) {
+      permissions = Permissions.resolve(permissions).toString();
+    }
 
     return this.client.api
       .guilds(this.guild.id)
@@ -134,7 +192,9 @@ class RoleManager extends BaseManager {
           guild_id: this.guild.id,
           role: r,
         });
-        if (position) return role.setPosition(position, reason);
+        if (position) {
+          return role.setPosition(position, reason);
+        }
         return role;
       });
   }
@@ -147,7 +207,9 @@ class RoleManager extends BaseManager {
    */
   botRoleFor(user) {
     const userID = this.client.users.resolveID(user);
-    if (!userID) return null;
+    if (!userID) {
+      return null;
+    }
     return this.cache.find(role => role.tags?.botID === userID) ?? null;
   }
 

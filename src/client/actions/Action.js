@@ -31,21 +31,12 @@ class GenericAction {
     return existing;
   }
 
-  getChannel(data) {
-    const id = data.channel_id || data.id;
-    return (
-      data.channel ||
-      this.getPayload(
-        {
-          id,
-          guild_id: data.guild_id,
-          recipients: [data.author || { id: data.user_id }],
-        },
-        this.client.channels,
-        id,
-        PartialTypes.CHANNEL,
-      )
-    );
+  getChannel(data, guild) {
+    return this.client.channels.cache.get(data.channel_id)
+      ?? this.client.channels.add({
+        id: data.channel_id,
+        type: guild ? 0 : 1
+      }, guild, false);
   }
 
   getMessage(data, channel, cache) {
@@ -82,6 +73,11 @@ class GenericAction {
 
   getMember(data, guild) {
     return this.getPayload(data, guild.members, data.user.id, PartialTypes.GUILD_MEMBER);
+  }
+
+  getGuild(data) {
+    return this.client.guilds.cache.get(data.guild_id)
+      ?? this.client.guilds.add({ id: data.guild_id, shardID: data.shardID }, false)
   }
 
   getUser(data) {

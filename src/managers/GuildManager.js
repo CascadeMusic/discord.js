@@ -160,31 +160,55 @@ class GuildManager extends BaseManager {
     } = {},
   ) {
     icon = await DataResolver.resolveImage(icon);
+
     if (typeof verificationLevel !== 'undefined' && typeof verificationLevel !== 'number') {
       verificationLevel = VerificationLevels.indexOf(verificationLevel);
     }
+
     if (typeof defaultMessageNotifications !== 'undefined' && typeof defaultMessageNotifications !== 'number') {
       defaultMessageNotifications = DefaultMessageNotifications.indexOf(defaultMessageNotifications);
     }
+
     if (typeof explicitContentFilter !== 'undefined' && typeof explicitContentFilter !== 'number') {
       explicitContentFilter = ExplicitContentFilterLevels.indexOf(explicitContentFilter);
     }
+
     for (const channel of channels) {
-      if (channel.type) channel.type = ChannelTypes[channel.type.toUpperCase()];
+      if (channel.type) {
+        channel.type = ChannelTypes[channel.type.toUpperCase()];
+      }
+
       channel.parent_id = channel.parentID;
       delete channel.parentID;
-      if (!channel.permissionOverwrites) continue;
-      for (const overwrite of channel.permissionOverwrites) {
-        if (overwrite.allow) overwrite.allow = Permissions.resolve(overwrite.allow);
-        if (overwrite.deny) overwrite.deny = Permissions.resolve(overwrite.deny);
+
+      if (!channel.permissionOverwrites) {
+        continue;
       }
+
+      for (const overwrite of channel.permissionOverwrites) {
+        if (overwrite.allow) {
+          overwrite.allow = Permissions.resolve(overwrite.allow);
+        }
+
+        if (overwrite.deny) {
+          overwrite.deny = Permissions.resolve(overwrite.deny);
+        }
+      }
+
       channel.permission_overwrites = channel.permissionOverwrites;
       delete channel.permissionOverwrites;
     }
+
     for (const role of roles) {
-      if (role.color) role.color = resolveColor(role.color);
-      if (role.permissions) role.permissions = Permissions.resolve(role.permissions);
+      if (role.color) {
+        role.color = resolveColor(role.color);
+      }
+
+      if (role.permissions) {
+        role.permissions = Permissions.resolve(role.permissions);
+      }
     }
+
     return new Promise((resolve, reject) =>
       this.client.api.guilds
         .post({
@@ -203,7 +227,9 @@ class GuildManager extends BaseManager {
           },
         })
         .then(data => {
-          if (this.client.guilds.cache.has(data.id)) return resolve(this.client.guilds.cache.get(data.id));
+          if (this.client.guilds.cache.has(data.id)) {
+            return resolve(this.client.guilds.cache.get(data.id));
+          }
 
           const handleGuild = guild => {
             if (guild.id === data.id) {
@@ -227,6 +253,15 @@ class GuildManager extends BaseManager {
   }
 
   /**
+   * Creates a data-less Guild instance
+   * @param {string} id Guild ID
+   * @returns {Guild}
+   */
+  forge(id) {
+    return this.add({ id }, false)
+  }
+
+  /**
    * Obtains a guild from Discord, or the guild cache if it's already available.
    * @param {Snowflake} id ID of the guild
    * @param {boolean} [cache=true] Whether to cache the new guild object if it isn't already
@@ -238,14 +273,71 @@ class GuildManager extends BaseManager {
    *   .then(guild => console.log(guild.name))
    *   .catch(console.error);
    */
-  async fetch(id, cache = true, force = false) {
-    if (!force) {
-      const existing = this.cache.get(id);
-      if (existing) return existing;
+  async fetch(id, cache) {
+    let options = {};
+    switch (typeof cache) {
+      case "boolean":
+        options.cache = cache;
+        break;
+      case "object":
+        options = cache || {};
+        break;
     }
 
-    const data = await this.client.api.guilds(id).get({ query: { with_counts: true } });
-    return this.add(data, cache);
+    switch (typeof id) {
+      case "string":
+        options.id = id;
+        break;
+      case "boolean":
+        options.cache = id;
+        break;
+      case "object":
+        options = id || {};
+        break;
+    }
+
+    if (typeof options.cache === "undefined") {
+      options.cache = true;
+    }
+
+    if (options.id) {
+      const existing = this.cache.get(options.id);
+      if (!options.force && existing && existing.ownerID) {
+        return existing;
+      }
+      const guild = await this.client.api.guilds(options.id).get({ query: { with_counts: true } });
+      return this.add(guild, options.cache || this.cache.has(options.id));
+    }
+
+    const c = new Collection(),
+      l = options.limit > 100 ? 100 : options.limit || 100;
+
+    let guilds = await this.client.api.users("@me").guilds().get({
+      query: {
+        limit: l,
+        after: options.after || 0,
+        before: options.before || 0
+      }
+    });
+
+    while (guilds.length) {
+      for (const guild of guilds) {
+        c.set(guild.id, this.cache.get(guild.id) || this.add(guild, options.cache));
+        if (options.limit && c.size >= options.limit) {
+          return c;
+        }
+      }
+
+      guilds = guilds.length === 100 && (!options.limit || c.size < options.limit) ? await this.client.api.users("@me").guilds().get({
+        query: {
+          limit: 100,
+          after: c.last(),
+          before: options.before || 0
+        }
+      }) : [];
+    }
+
+    return c;
   }
 }
 

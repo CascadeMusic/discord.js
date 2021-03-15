@@ -71,22 +71,39 @@ class GuildMember extends Base {
     this.pending = false;
 
     this._roles = [];
-    if (data) this._patch(data);
+    if (data) {
+      this._patch(data);
+    }
   }
 
   _patch(data) {
     if ('user' in data) {
-      /**
-       * The user that this guild member instance represents
-       * @type {User}
-       */
-      this.user = this.client.users.add(data.user, true);
+      this._userID = data.user.id;
+      if (data.user.username) {
+        const user = this.client.users.add(data.user, data._cache || this.client.doCache("members") || this.client.users.cache.has(data.user.id));
+
+        if (!this.client.users.cache.has(user.id)) {
+          this._user = user;
+        }
+      }
     }
 
-    if ('nick' in data) this.nickname = data.nick;
-    if ('joined_at' in data) this.joinedTimestamp = new Date(data.joined_at).getTime();
-    if ('premium_since' in data) this.premiumSinceTimestamp = new Date(data.premium_since).getTime();
-    if ('roles' in data) this._roles = data.roles;
+    if ('nick' in data) {
+      this.nickname = data.nick;
+    }
+
+    if ('joined_at' in data) {
+      this.joinedTimestamp = new Date(data.joined_at).getTime();
+    }
+
+    if ('premium_since' in data) {
+      this.premiumSinceTimestamp = new Date(data.premium_since).getTime();
+    }
+
+    if ('roles' in data) {
+      this._roles = data.roles;
+    }
+
     this.pending = data.pending ?? false;
   }
 
@@ -94,6 +111,21 @@ class GuildMember extends Base {
     const clone = super._clone();
     clone._roles = this._roles.slice();
     return clone;
+  }
+
+  /**
+   * The user that this guild member instance represents
+   * @type {User}
+   * @readonly
+   */
+  get user() {
+    if (!this._userID) {
+      return null;
+    }
+
+    return this.client.users.cache.get(this._userID)
+      ?? this._user
+      ?? this.client.users.add({ id: this._userID }, false);
   }
 
   /**
@@ -130,7 +162,9 @@ class GuildMember extends Base {
    * @readonly
    */
   get voice() {
-    if (!Structures) Structures = require('../util/Structures');
+    if (!Structures) {
+      Structures = require('../util/Structures');
+    }
     const VoiceState = Structures.get('VoiceState');
     return this.guild.voiceStates.cache.get(this.id) || new VoiceState(this.guild, { user_id: this.id });
   }
@@ -159,17 +193,20 @@ class GuildMember extends Base {
    * @readonly
    */
   get presence() {
-    if (!Structures) Structures = require('../util/Structures');
+    if (!this.guild.presences.cache.has(this.id) && this._presence) {
+      return this._presence;
+    }
+
+    if (!Structures) {
+      Structures = require('../util/Structures');
+    }
+
     const Presence = Structures.get('Presence');
-    return (
-      this.guild.presences.cache.get(this.id) ||
-      new Presence(this.client, {
-        user: {
-          id: this.id,
-        },
-        guild: this.guild,
+    return this.guild.presences.cache.get(this.id)
+      ?? new Presence(this.client, {
+        user: { id: this.id, },
+        guild: this.guild
       })
-    );
   }
 
   /**
@@ -216,7 +253,9 @@ class GuildMember extends Base {
    * @readonly
    */
   get permissions() {
-    if (this.user.id === this.guild.ownerID) return new Permissions(Permissions.ALL).freeze();
+    if (this.user.id === this.guild.ownerID) {
+      return new Permissions(Permissions.ALL).freeze();
+    }
     return new Permissions(this.roles.cache.map(role => role.permissions)).freeze();
   }
 
@@ -227,10 +266,22 @@ class GuildMember extends Base {
    * @readonly
    */
   get manageable() {
-    if (this.user.id === this.guild.ownerID) return false;
-    if (this.user.id === this.client.user.id) return false;
-    if (this.client.user.id === this.guild.ownerID) return true;
-    if (!this.guild.me) throw new Error('GUILD_UNCACHED_ME');
+    if (this.user.id === this.guild.ownerID) {
+      return false;
+    }
+
+    if (this.user.id === this.client.user.id) {
+      return false;
+    }
+
+    if (this.client.user.id === this.guild.ownerID) {
+      return true;
+    }
+
+    if (!this.guild.me) {
+      throw new Error('GUILD_UNCACHED_ME');
+    }
+
     return this.guild.me.roles.highest.comparePositionTo(this.roles.highest) > 0;
   }
 
@@ -260,7 +311,9 @@ class GuildMember extends Base {
    */
   permissionsIn(channel) {
     channel = this.guild.channels.resolve(channel);
-    if (!channel) throw new Error('GUILD_CHANNEL_RESOLVE');
+    if (!channel) {
+      throw new Error('GUILD_CHANNEL_RESOLVE');
+    }
     return channel.memberPermissions(this);
   }
 
@@ -293,20 +346,29 @@ class GuildMember extends Base {
       data.channel_id = null;
       data.channel = undefined;
     }
-    if (data.roles) data.roles = data.roles.map(role => (role instanceof Role ? role.id : role));
+
+    if (data.roles) {
+      data.roles = data.roles.map(role => (role instanceof Role ? role.id : role));
+    }
+
     let endpoint = this.client.api.guilds(this.guild.id);
     if (this.user.id === this.client.user.id) {
       const keys = Object.keys(data);
-      if (keys.length === 1 && keys[0] === 'nick') endpoint = endpoint.members('@me').nick;
-      else endpoint = endpoint.members(this.id);
+      if (keys.length === 1 && keys[0] === 'nick') {
+        endpoint = endpoint.members('@me').nick;
+      } else {
+        endpoint = endpoint.members(this.id);
+      }
     } else {
       endpoint = endpoint.members(this.id);
     }
+
     await endpoint.patch({ data, reason });
 
     const clone = this._clone();
     data.user = this.user;
     clone._patch(data);
+
     return clone;
   }
 
@@ -399,7 +461,8 @@ class GuildMember extends Base {
 
   // These are here only for documentation purposes - they are implemented by TextBasedChannel
   /* eslint-disable no-empty-function */
-  send() {}
+  send() {
+  }
 }
 
 TextBasedChannel.applyToClass(GuildMember);

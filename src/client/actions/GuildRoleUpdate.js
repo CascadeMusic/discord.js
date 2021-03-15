@@ -5,33 +5,21 @@ const { Events } = require('../../util/Constants');
 
 class GuildRoleUpdateAction extends Action {
   handle(data) {
-    const client = this.client;
-    const guild = client.guilds.cache.get(data.guild_id);
-
-    if (guild) {
-      let old = null;
-
-      const role = guild.roles.cache.get(data.role.id);
-      if (role) {
-        old = role._update(data.role);
-        /**
-         * Emitted whenever a guild role is updated.
-         * @event Client#roleUpdate
-         * @param {Role} oldRole The role before the update
-         * @param {Role} newRole The role after the update
-         */
-        client.emit(Events.GUILD_ROLE_UPDATE, old, role);
-      }
-
-      return {
-        old,
-        updated: role,
-      };
+    const c = this.client;
+    const guild = c.guilds.cache.get(data.guild_id) || c.guilds.add({
+      id: data.guild_id,
+      shardID: data.shardID
+    }, false);
+    let role = guild.roles.cache.get(data.role.id);
+    let old = null;
+    if(role) {
+      old = role._update(data.role);
+    } else {
+      role = guild.roles.add(data.role, c.options.cacheRoles || guild.roles.cache.size);
     }
-
     return {
-      old: null,
-      updated: null,
+      old,
+      updated: role
     };
   }
 }

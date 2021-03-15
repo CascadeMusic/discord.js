@@ -13,32 +13,28 @@ const { Events } = require('../../util/Constants');
 
 class MessageReactionRemove extends Action {
   handle(data) {
-    if (!data.emoji) return false;
+    const client = this.client,
+      channel = this.getChannel(data, data.guild_id ? this.getGuild(data) : void 0)
 
-    const user = this.getUser(data);
-    if (!user) return false;
+    const user = client.users.cache.get(data.user_id) || client.users.add({ id: data.user_id }, false),
+      message = channel.messages.cache.get(data.message_id) || channel.messages.add({ id: data.message_id }, false),
+      reaction = message.reactions.cache.get(data.emoji.id || data.emoji.name) || message.reactions.add({
+        emoji: data.emoji,
+        count: null,
+        me: null
+      }, channel.messages.cache.has(data.message_id));
 
-    // Verify channel
-    const channel = this.getChannel(data);
-    if (!channel || channel.type === 'voice') return false;
+    reaction.me = data.user_id === client.user.id;
+    if (channel.messages.cache.has(message.id)) {
+      reaction.users.cache.delete(user.id);
+      reaction.count = reaction.users.cache.size;
 
-    // Verify message
-    const message = this.getMessage(data, channel);
-    if (!message) return false;
+      if (reaction.count === 0) {
+        message.reactions.cache.delete(data.emoji.id || data.emoji.name);
+      }
+    }
 
-    // Verify reaction
-    const reaction = this.getReaction(data, message, user);
-    if (!reaction) return false;
-    reaction._remove(user);
-    /**
-     * Emitted whenever a reaction is removed from a cached message.
-     * @event Client#messageReactionRemove
-     * @param {MessageReaction} messageReaction The reaction object
-     * @param {User} user The user whose emoji or reaction emoji was removed
-     */
-    this.client.emit(Events.MESSAGE_REACTION_REMOVE, reaction, user);
-
-    return { message, reaction, user };
+    return { message, reaction, user }
   }
 }
 

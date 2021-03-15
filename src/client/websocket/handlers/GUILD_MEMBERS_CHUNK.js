@@ -3,15 +3,15 @@
 const Collection = require('../../../util/Collection');
 const { Events } = require('../../../util/Constants');
 
-module.exports = (client, { d: data }) => {
-  const guild = client.guilds.cache.get(data.guild_id);
-  if (!guild) return;
-  const members = new Collection();
+module.exports = (client, { d: data }, shard) => {
+  const guild = client.guilds.cache.get(data.guild_id)
+    ?? client.guilds.add({ id: data.guild_id, shardID: shard.id }, false);
 
-  for (const member of data.members) members.set(member.user.id, guild.members.add(member));
-  if (data.presences) {
-    for (const presence of data.presences) guild.presences.add(Object.assign(presence, { guild }));
+  const members = new Collection();
+  for (const member of data.members) {
+    members.set(member.user.id, guild.members.add(member, false));
   }
+
   /**
    * Emitted whenever a chunk of guild members is received (all members come from the same guild).
    * @event Client#guildMembersChunk

@@ -27,7 +27,16 @@ class MessageManager extends BaseManager {
    */
 
   add(data, cache) {
-    return super.add(data, cache, { extras: [this.channel] });
+    return super.add(data, cache, { extras: [ this.channel ] });
+  }
+
+  /**
+   * Creates a data-less instance of Message
+   * @param {string} id Message Id
+   * @returns {Message}
+   */
+  forge(id) {
+    return this.add({ id }, false);
   }
 
   /**
@@ -83,7 +92,9 @@ class MessageManager extends BaseManager {
   fetchPinned(cache = true) {
     return this.client.api.channels[this.channel.id].pins.get().then(data => {
       const messages = new Collection();
-      for (const message of data) messages.set(message.id, this.add(message, cache));
+      for (const message of data) {
+        messages.set(message.id, this.add(message, cache));
+      }
       return messages;
     });
   }
@@ -120,7 +131,9 @@ class MessageManager extends BaseManager {
    */
   async delete(message) {
     message = this.resolveID(message);
-    if (!message) throw new TypeError('INVALID_TYPE', 'message', 'MessageResolvable');
+    if (!message) {
+      throw new TypeError('INVALID_TYPE', 'message', 'MessageResolvable');
+    }
 
     await this.client.api.channels(this.channel.id).messages(message).delete();
   }
@@ -128,7 +141,9 @@ class MessageManager extends BaseManager {
   async _fetchId(messageID, cache, force) {
     if (!force) {
       const existing = this.cache.get(messageID);
-      if (existing && !existing.partial) return existing;
+      if (existing && !existing.partial) {
+        return existing;
+      }
     }
 
     const data = await this.client.api.channels[this.channel.id].messages[messageID].get();
@@ -138,7 +153,9 @@ class MessageManager extends BaseManager {
   async _fetchMany(options = {}, cache) {
     const data = await this.client.api.channels[this.channel.id].messages.get({ query: options });
     const messages = new Collection();
-    for (const message of data) messages.set(message.id, this.add(message, cache));
+    for (const message of data) {
+      messages.set(message.id, this.add(message, cache));
+    }
     return messages;
   }
 }

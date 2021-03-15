@@ -19,7 +19,20 @@ class ReactionManager extends BaseManager {
   }
 
   add(data, cache) {
-    return super.add(data, cache, { id: data.emoji.id || data.emoji.name, extras: [this.message] });
+    return super.add(data, cache, { id: data.emoji.id || data.emoji.name, extras: [ this.message ] });
+  }
+
+  /**
+   * Creates a data-less instance of a MessageReaction
+   * @param {string} id Emoji Id or name
+   * @returns {MessageReaction}
+   */
+  forge(id) {
+    const emoji = {
+      [Number.isNaN(id) ? "name" : "id"]: id
+    }
+
+    return this.add({ emoji }, false);
   }
 
   /**

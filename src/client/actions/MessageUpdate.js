@@ -4,20 +4,16 @@ const Action = require('./Action');
 
 class MessageUpdateAction extends Action {
   handle(data) {
-    const channel = this.getChannel(data);
-    if (channel) {
-      const { id, channel_id, guild_id, author, timestamp, type } = data;
-      const message = this.getMessage({ id, channel_id, guild_id, author, timestamp, type }, channel);
-      if (message) {
-        const old = message.patch(data);
-        return {
-          old,
-          updated: message,
-        };
-      }
+    const channel = this.getChannel(data, guild);
+
+    let updated = channel.messages.cache.get(data.id), old = null;
+    if (updated) {
+      old = updated.patch(data);
+    } else {
+      updated = channel.messages.add(data, false);
     }
 
-    return {};
+    return { old, updated }
   }
 }
 

@@ -28,8 +28,18 @@ class GuildMemberRoleManager {
    * @readonly
    */
   get _roles() {
-    const everyone = this.guild.roles.everyone;
-    return this.guild.roles.cache.filter(role => this.member._roles.includes(role.id)).set(everyone.id, everyone);
+    const { everyone } = this.guild.roles,
+      roles = new Collection();
+
+    roles.set(everyone.id, everyone);
+    for (const role of this.member._roles) {
+      roles.set(role, this.guild.roles.cache.get(role) || this.guild.roles.add({
+        id: role,
+        permissions: 0
+      }, false));
+    }
+
+    return roles;
   }
 
   /**
@@ -48,7 +58,9 @@ class GuildMemberRoleManager {
    */
   get hoist() {
     const hoistedRoles = this._roles.filter(role => role.hoist);
-    if (!hoistedRoles.size) return null;
+    if (!hoistedRoles.size) {
+      return null;
+    }
     return hoistedRoles.reduce((prev, role) => (!prev || role.comparePositionTo(prev) > 0 ? role : prev));
   }
 
@@ -59,7 +71,9 @@ class GuildMemberRoleManager {
    */
   get color() {
     const coloredRoles = this._roles.filter(role => role.color);
-    if (!coloredRoles.size) return null;
+    if (!coloredRoles.size) {
+      return null;
+    }
     return coloredRoles.reduce((prev, role) => (!prev || role.comparePositionTo(prev) > 0 ? role : prev));
   }
 
@@ -88,7 +102,9 @@ class GuildMemberRoleManager {
    * @readonly
    */
   get botRole() {
-    if (!this.member.user.bot) return null;
+    if (!this.member.user.bot) {
+      return null;
+    }
     return this.cache.find(role => role.tags && role.tags.botID === this.member.user.id) || null;
   }
 
@@ -105,7 +121,7 @@ class GuildMemberRoleManager {
         throw new TypeError('INVALID_TYPE', 'roles', 'Array or Collection of Roles or Snowflakes', true);
       }
 
-      const newRoles = [...new Set(roleOrRoles.concat(...this._roles.values()))];
+      const newRoles = [ ...new Set(roleOrRoles.concat(...this._roles.values())) ];
       return this.set(newRoles, reason);
     } else {
       roleOrRoles = this.guild.roles.resolve(roleOrRoles);
@@ -116,7 +132,7 @@ class GuildMemberRoleManager {
       await this.client.api.guilds[this.guild.id].members[this.member.id].roles[roleOrRoles.id].put({ reason });
 
       const clone = this.member._clone();
-      clone._roles = [...this._roles.keys(), roleOrRoles.id];
+      clone._roles = [ ...this._roles.keys(), roleOrRoles.id ];
       return clone;
     }
   }
@@ -146,7 +162,7 @@ class GuildMemberRoleManager {
 
       const clone = this.member._clone();
       const newRoles = this._roles.filter(role => role.id !== roleOrRoles.id);
-      clone._roles = [...newRoles.keys()];
+      clone._roles = [ ...newRoles.keys() ];
       return clone;
     }
   }
@@ -173,7 +189,7 @@ class GuildMemberRoleManager {
 
   clone() {
     const clone = new this.constructor(this.member);
-    clone.member._roles = [...this._roles.keyArray()];
+    clone.member._roles = [ ...this._roles.keyArray() ];
     return clone;
   }
 

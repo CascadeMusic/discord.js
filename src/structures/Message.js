@@ -15,6 +15,8 @@ const MessageFlags = require('../util/MessageFlags');
 const Permissions = require('../util/Permissions');
 const SnowflakeUtil = require('../util/Snowflake');
 const Util = require('../util/Util');
+const MessageMentions = require("./MessageMentions");
+const Constants = require("../util/Constants");
 
 /**
  * Represents a message on Discord.
@@ -41,7 +43,19 @@ class Message extends Base {
      */
     this.deleted = false;
 
-    if (data) this._patch(data);
+    if (!this.client.channels.cache.get(channel.id)) {
+      this._channel = channel;
+      Object.defineProperty(this, "channel", {
+        enumerable: false,
+        get: function () {
+          return this.client.channels.cache.get(this._channel.id) ?? this._channel;
+        }
+      });
+    }
+
+    if (data) {
+      this._patch(data);
+    }
   }
 
   _patch(data) {
@@ -78,14 +92,16 @@ class Message extends Base {
       this.content = null;
     }
 
-    if ('author' in data) {
-      /**
-       * The author of the message
-       * @type {?User}
-       */
-      this.author = this.client.users.add(data.author, !data.webhook_id);
-    } else if (!this.author) {
-      this.author = null;
+    this.author = data.author
+      ? this.client.users.add(data.author, this.client.doCache("members") || this.client.users.cache.has(data.author.id))
+      : null;
+
+    if (data.member && this.guild && this.author) {
+      const member = this.guild.members.add(Object.assign(data.member, { user: this.author }), this.client.doCache("members") || this.client.users.cache.has(data.author.id));
+
+      if (!this.guild.members.cache.has(this.author.id)) {
+        this._member = member;
+      }
     }
 
     if ('pinned' in data) {
@@ -156,11 +172,37 @@ class Message extends Base {
       }
     }
 
-    /**
-     * All valid mentions that the message contains
-     * @type {MessageMentions}
-     */
-    this.mentions = new Mentions(this, data.mentions, data.mention_roles, data.mention_everyone, data.mention_channels);
+    this.mentions = new MessageMentions(this, null, null, data.mention_everyone, data.mention_channels);
+    this.mentions._members = [];
+
+    if (data.mentions && data.mentions.length) {
+      for (const mention of data.mentions) {
+        this.mentions.users.set(mention.id, this.client.users.add(mention, this.client.users.cache.has(mention.id)));
+
+        if (mention.member && this.guild) {
+          mention.member = Object.assign(mention.member, { user: mention });
+
+          if (this.client.users.cache.has(mention.id)) {
+            if (this.guild.members.cache.has(mention.id)) {
+              this.guild.members.cache.get(mention.id)._patch(mention.member);
+            } else {
+              this.guild.members.add(mention.member);
+            }
+          } else {
+            this.mentions._members.push(mention.member);
+          }
+        }
+      }
+    }
+
+    if (data.mention_roles && data.mention_roles.length && this.guild) {
+      for (const role of data.mention_roles) {
+        const _role = this.guild.roles.cache.get(role)
+          ?? this.guild.roles.add({ id: role, permissions: 0 }, false)
+
+        this.mentions.roles.set(role, _role);
+      }
+    }
 
     /**
      * ID of the webhook that sent the message, if applicable
@@ -180,16 +222,10 @@ class Message extends Base {
      */
     this.activity = data.activity
       ? {
-          partyID: data.activity.party_id,
-          type: data.activity.type,
-        }
+        partyID: data.activity.party_id,
+        type: data.activity.type,
+      }
       : null;
-
-    if (this.member && data.member) {
-      this.member._patch(data.member);
-    } else if (data.member && this.guild && this.author) {
-      this.guild.members.add(Object.assign(data.member, { user: this.author }));
-    }
 
     /**
      * Flags that are applied to the message
@@ -211,10 +247,10 @@ class Message extends Base {
      */
     this.reference = data.message_reference
       ? {
-          channelID: data.message_reference.channel_id,
-          guildID: data.message_reference.guild_id,
-          messageID: data.message_reference.message_id,
-        }
+        channelID: data.message_reference.channel_id,
+        guildID: data.message_reference.guild_id,
+        messageID: data.message_reference.message_id,
+      }
       : null;
 
     if (data.referenced_message) {
@@ -240,12 +276,27 @@ class Message extends Base {
   patch(data) {
     const clone = this._clone();
 
-    if ('edited_timestamp' in data) this.editedTimestamp = new Date(data.edited_timestamp).getTime();
-    if ('content' in data) this.content = data.content;
-    if ('pinned' in data) this.pinned = data.pinned;
-    if ('tts' in data) this.tts = data.tts;
-    if ('embeds' in data) this.embeds = data.embeds.map(e => new Embed(e, true));
-    else this.embeds = this.embeds.slice();
+    if ('edited_timestamp' in data) {
+      this.editedTimestamp = new Date(data.edited_timestamp).getTime();
+    }
+
+    if ('content' in data) {
+      this.content = data.content;
+    }
+
+    if ('pinned' in data) {
+      this.pinned = data.pinned;
+    }
+
+    if ('tts' in data) {
+      this.tts = data.tts;
+    }
+
+    if ('embeds' in data) {
+      this.embeds = data.embeds.map(e => new Embed(e, true));
+    } else {
+      this.embeds = this.embeds.slice();
+    }
 
     if ('attachments' in data) {
       this.attachments = new Collection();
@@ -256,6 +307,8 @@ class Message extends Base {
       this.attachments = new Collection(this.attachments);
     }
 
+    this.flags = new MessageFlags('flags' in data ? data.flags : 0).freeze();
+
     this.mentions = new Mentions(
       this,
       'mentions' in data ? data.mentions : this.mentions.users,
@@ -264,7 +317,36 @@ class Message extends Base {
       'mention_channels' in data ? data.mention_channels : this.mentions.crosspostedChannels,
     );
 
-    this.flags = new MessageFlags('flags' in data ? data.flags : 0).freeze();
+    if (data.mentions && data.mentions.length) {
+      this.mentions.users.clear();
+      this.mentions._members = [];
+
+      for (const mention of data.mentions) {
+        this.mentions.users.set(mention.id, this.client.users.add(mention, this.client.users.cache.has(mention.id)));
+
+        if (mention.member && this.guild) {
+          mention.member = Object.assign(mention.member, { user: mention });
+
+          if (this.client.users.cache.has(mention.id)) {
+            if (this.guild.members.cache.has(mention.id)) {
+              this.guild.members.cache.get(mention.id)._patch(mention.member);
+            } else {
+              this.guild.members.add(mention.member);
+            }
+          } else {
+            this.mentions._members.push(mention.member);
+          }
+        }
+      }
+    }
+
+    if (data.mention_roles && data.mention_roles.length && this.guild) {
+      this.mentions.roles.clear();
+
+      for (const role of data.mention_roles) {
+        this.mentions.roles.set(role, this.guild.roles.cache.get(role) || this.guild.roles.add({ id: role }, false));
+      }
+    }
 
     return clone;
   }
@@ -276,7 +358,16 @@ class Message extends Base {
    * @readonly
    */
   get member() {
-    return this.guild ? this.guild.members.resolve(this.author) || null : null;
+    if (!this.guild) {
+      return null;
+    }
+
+    const id = (this.author || {}).id ?? (this._member || {}).id;
+    if (!id) {
+      return null;
+    }
+
+    return this.guild.members.cache.get(id) ?? this._member ?? null;
   }
 
   /**
@@ -365,8 +456,11 @@ class Message extends Base {
     return new Promise((resolve, reject) => {
       const collector = this.createReactionCollector(filter, options);
       collector.once('end', (reactions, reason) => {
-        if (options.errors && options.errors.includes(reason)) reject(reactions);
-        else resolve(reactions);
+        if (options.errors && options.errors.includes(reason)) {
+          reject(reactions);
+        } else {
+          resolve(reactions);
+        }
       });
     });
   }
@@ -386,11 +480,25 @@ class Message extends Base {
    * @readonly
    */
   get deletable() {
-    return Boolean(
-      !this.deleted &&
-        (this.author.id === this.client.user.id ||
-          this.channel.permissionsFor?.(this.client.user)?.has(Permissions.FLAGS.MANAGE_MESSAGES)),
-    );
+    if (this.deleted) {
+      return false;
+    }
+
+    if (this.author.id === this.client.user.id) {
+      return true;
+    }
+
+    if (!this.guild) {
+      return false;
+    }
+
+    if ((!this.client.doCache("roles") && !this.guild.roles.cache.size) || (!this.client.doCache("overwrites") && !this.channel.permissionOverwrites.size)) {
+      return false;
+    }
+
+    return this
+      .permissionsFor(this.client.user)
+      .has(Permissions.FLAGS.MANAGE_MESSAGES, false);
   }
 
   /**
@@ -399,10 +507,21 @@ class Message extends Base {
    * @readonly
    */
   get pinnable() {
-    return (
-      this.type === 'DEFAULT' &&
-      (!this.guild || this.channel.permissionsFor(this.client.user).has(Permissions.FLAGS.MANAGE_MESSAGES, false))
-    );
+    if (this.type !== Constants.MessageTypes[0]) {
+      return false;
+    }
+
+    if (!this.guild) {
+      return true;
+    }
+
+    if ((!this.client.doCache("roles") && !this.guild.roles.cache.size) || (!this.client.doCache("overwrites") && !this.channel.permissionOverwrites.size)) {
+      return false;
+    }
+
+    return this.channel
+      .permissionsFor(this.client.user)
+      .has(Permissions.FLAGS.MANAGE_MESSAGES, false);
   }
 
   /**
@@ -411,9 +530,13 @@ class Message extends Base {
    * @readonly
    */
   get referencedMessage() {
-    if (!this.reference) return null;
+    if (!this.reference) {
+      return null;
+    }
     const referenceChannel = this.client.channels.resolve(this.reference.channelID);
-    if (!referenceChannel) return null;
+    if (!referenceChannel) {
+      return null;
+    }
     return referenceChannel.messages.resolve(this.reference.messageID);
   }
 
@@ -423,15 +546,20 @@ class Message extends Base {
    * @readonly
    */
   get crosspostable() {
-    return (
-      this.channel.type === 'news' &&
-      !this.flags.has(MessageFlags.FLAGS.CROSSPOSTED) &&
-      this.type === 'DEFAULT' &&
-      this.channel.viewable &&
-      this.channel.permissionsFor(this.client.user).has(Permissions.FLAGS.SEND_MESSAGES) &&
-      (this.author.id === this.client.user.id ||
-        this.channel.permissionsFor(this.client.user).has(Permissions.FLAGS.MANAGE_MESSAGES))
-    );
+    if (this.channel.type !== "news" || this.type !== "DEFAULT" || this.flags.has(MessageFlags.FLAGS.CROSSPOSTED)) {
+      return false;
+    }
+
+    if ((!this.client.doCache("roles") && !this.guild.roles.cache.size) || (!this.client.doCache("overwrites") && !this.channel.permissionOverwrites.size)) {
+      return false;
+    }
+
+    return this.channel.viewable && this.channel
+        .permissionsFor(this.client.user)
+        .has(Permissions.FLAGS.SEND_MESSAGES)
+      && (this.author.id === this.client.user.id || this.channel
+        .permissionsFor(this.client.user)
+        .has(Permissions.FLAGS.MANAGE_MESSAGES));
   }
 
   /**
@@ -536,7 +664,9 @@ class Message extends Base {
    */
   react(emoji) {
     emoji = this.client.emojis.resolveIdentifier(emoji);
-    if (!emoji) throw new TypeError('EMOJI_TYPE');
+    if (!emoji) {
+      throw new TypeError('EMOJI_TYPE');
+    }
 
     return this.client.api
       .channels(this.channel.id)
@@ -580,8 +710,8 @@ class Message extends Base {
       content instanceof APIMessage
         ? content
         : APIMessage.transformOptions(content, options, {
-            replyTo: this,
-          }),
+          replyTo: this,
+        }),
     );
   }
 
@@ -599,7 +729,9 @@ class Message extends Base {
    * @returns {Promise<?Webhook>}
    */
   fetchWebhook() {
-    if (!this.webhookID) return Promise.reject(new Error('WEBHOOK_MESSAGE'));
+    if (!this.webhookID) {
+      return Promise.reject(new Error('WEBHOOK_MESSAGE'));
+    }
     return this.client.fetchWebhook(this.webhookID);
   }
 
@@ -629,9 +761,13 @@ class Message extends Base {
    * @returns {boolean}
    */
   equals(message, rawData) {
-    if (!message) return false;
+    if (!message) {
+      return false;
+    }
     const embedUpdate = !message.author && !message.attachments;
-    if (embedUpdate) return this.id === message.id && this.embeds.length === message.embeds.length;
+    if (embedUpdate) {
+      return this.id === message.id && this.embeds.length === message.embeds.length;
+    }
 
     let equal =
       this.id === message.id &&

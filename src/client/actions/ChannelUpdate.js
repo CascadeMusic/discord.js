@@ -6,27 +6,42 @@ const { ChannelTypes } = require('../../util/Constants');
 
 class ChannelUpdateAction extends Action {
   handle(data) {
-    const client = this.client;
+    const client = this.client,
+      guild = data.guild_id ? this.getGuild(data) : void 0;
 
-    let channel = client.channels.cache.get(data.id);
-    if (channel) {
-      const old = channel._update(data);
+    if (client.channels.cache.has(data.id)) {
+      let newChannel = client.channels.cache.get(data.id);
+      if (guild && (!client.doCache("overwrites") && !newChannel.permissionOverwrites.size)) {
+        data.permission_overwrites = [];
+      }
 
-      if (ChannelTypes[channel.type.toUpperCase()] !== data.type) {
-        const newChannel = Channel.create(this.client, data, channel.guild);
-        for (const [id, message] of channel.messages.cache) newChannel.messages.cache.set(id, message);
-        newChannel._typing = new Map(channel._typing);
-        channel = newChannel;
-        this.client.channels.cache.set(channel.id, channel);
+      const oldChannel = newChannel._update(data);
+      if (ChannelTypes[oldChannel.type.toUpperCase()] !== data.type) {
+        const changedChannel = Channel.create(client, data, guild);
+        for (const [ id, message ] of newChannel.messages.cache) {
+          changedChannel.messages.cache.set(id, message);
+        }
+
+        changedChannel._typing = new Map(newChannel._typing);
+        newChannel = changedChannel;
+
+        client.channels.cache.set(newChannel.id, newChannel);
+        if (guild) {
+          guild.channels.add(newChannel);
+        }
       }
 
       return {
-        old,
-        updated: channel,
+        old: oldChannel,
+        updated: newChannel
       };
     }
 
-    return {};
+    const channel = client.channels.add(data, guild, client.options.cacheChannels);
+    return {
+      old: null,
+      updated: channel
+    }
   }
 }
 

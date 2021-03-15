@@ -66,7 +66,8 @@ class Presence {
    * @readonly
    */
   get user() {
-    return this.client.users.cache.get(this.userID) || null;
+    return this.client.users.cache.get(this.userID)
+      || this.client.users.add((this._member || {}).user || { id: this.userID }, false);
   }
 
   /**
@@ -75,7 +76,12 @@ class Presence {
    * @readonly
    */
   get member() {
-    return this.guild.members.cache.get(this.userID) || null;
+    if (!this.guild) {
+      return null;
+    }
+
+    return this.guild.members.cache.get(this.userID)
+      || this.guild.members.add(this._member || { user: { id: this.userID } }, false);
   }
 
   patch(data) {
@@ -92,7 +98,7 @@ class Presence {
        */
       this.activities = data.activities.map(activity => new Activity(this, activity));
     } else if (data.activity || data.game) {
-      this.activities = [new Activity(this, data.game || data.activity)];
+      this.activities = [ new Activity(this, data.game || data.activity) ];
     } else {
       this.activities = [];
     }
@@ -106,12 +112,23 @@ class Presence {
      */
     this.clientStatus = data.client_status || null;
 
+    if (this.guild && !this.guild.members.cache.has(data.user.id)) {
+      this._member = {
+        user: data.user,
+        roles: data.roles,
+        nick: data.nick,
+        premium_since: data.premium_since
+      };
+    }
+
     return this;
   }
 
   _clone() {
     const clone = Object.assign(Object.create(this), this);
-    if (this.activities) clone.activities = this.activities.map(activity => activity._clone());
+    if (this.activities) {
+      clone.activities = this.activities.map(activity => activity._clone());
+    }
     return clone;
   }
 
@@ -189,9 +206,9 @@ class Activity {
      */
     this.timestamps = data.timestamps
       ? {
-          start: data.timestamps.start ? new Date(Number(data.timestamps.start)) : null,
-          end: data.timestamps.end ? new Date(Number(data.timestamps.end)) : null,
-        }
+        start: data.timestamps.start ? new Date(Number(data.timestamps.start)) : null,
+        end: data.timestamps.end ? new Date(Number(data.timestamps.end)) : null,
+      }
       : null;
 
     /**
@@ -303,7 +320,9 @@ class RichPresenceAssets {
    * @returns {?string} The small image URL
    */
   smallImageURL({ format, size } = {}) {
-    if (!this.smallImage) return null;
+    if (!this.smallImage) {
+      return null;
+    }
     return this.activity.presence.client.rest.cdn.AppAsset(this.activity.applicationID, this.smallImage, {
       format,
       size,
@@ -318,7 +337,9 @@ class RichPresenceAssets {
    * @returns {?string} The large image URL
    */
   largeImageURL({ format, size } = {}) {
-    if (!this.largeImage) return null;
+    if (!this.largeImage) {
+      return null;
+    }
     if (/^spotify:/.test(this.largeImage)) {
       return `https://i.scdn.co/image/${this.largeImage.slice(8)}`;
     } else if (/^twitch:/.test(this.largeImage)) {

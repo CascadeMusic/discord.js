@@ -22,7 +22,14 @@ class GuildEmoji extends BaseGuildEmoji {
      * The user who created this emoji
      * @type {?User}
      */
-    this.author = null;
+    Object.defineProperty(this, "author", {
+      enumerable: false,
+      get: function () {
+        return this._author
+          ? this.client.users.cache.get(this._author) || this.client.users.add({ id: this._author }, false)
+          : null;
+      }
+    });
   }
 
   /**
@@ -39,7 +46,10 @@ class GuildEmoji extends BaseGuildEmoji {
 
   _patch(data) {
     super._patch(data);
-    if (typeof data.user !== 'undefined') this.author = this.client.users.add(data.user);
+
+    if (typeof data.user !== "undefined") {
+      this._author = data.user.id;
+    }
   }
 
   /**
@@ -48,7 +58,9 @@ class GuildEmoji extends BaseGuildEmoji {
    * @readonly
    */
   get deletable() {
-    if (!this.guild.me) throw new Error('GUILD_UNCACHED_ME');
+    if (!this.guild.me) {
+      throw new Error('GUILD_UNCACHED_ME');
+    }
     return !this.managed && this.guild.me.permissions.has(Permissions.FLAGS.MANAGE_EMOJIS);
   }
 
@@ -65,18 +77,23 @@ class GuildEmoji extends BaseGuildEmoji {
    * Fetches the author for this emoji
    * @returns {Promise<User>}
    */
-  async fetchAuthor() {
+  async fetchAuthor(cache = true) {
     if (this.managed) {
-      throw new Error('EMOJI_MANAGED');
+      throw new Error("EMOJI_MANAGED");
     } else {
-      if (!this.guild.me) throw new Error('GUILD_UNCACHED_ME');
-      if (!this.guild.me.permissions.has(Permissions.FLAGS.MANAGE_EMOJIS)) {
-        throw new Error('MISSING_MANAGE_EMOJIS_PERMISSION', this.guild);
+      if (!this.guild.me) {
+        throw new Error("GUILD_UNCACHED_ME");
+      }
+
+      if (this.guild.roles.cache.size && !this.guild.me.permissions.has(Discord.Permissions.FLAGS.MANAGE_EMOJIS)) {
+        throw new Error("MISSING_MANAGE_EMOJIS_PERMISSION", this.guild);
       }
     }
+
     const data = await this.client.api.guilds(this.guild.id).emojis(this.id).get();
     this._patch(data);
-    return this.author;
+
+    return this.client.users.add(data.user, cache);
   }
 
   /**

@@ -52,6 +52,15 @@ class UserManager extends BaseManager {
   }
 
   /**
+   * Creates a data-less User instance.
+   * @param {string} id User ID
+   * @returns {User}
+   */
+  forge(id) {
+    return this.add({ id }, false);
+  }
+
+  /**
    * Obtains a user from Discord, or the user cache if it's already available.
    * @param {Snowflake} id ID of the user
    * @param {boolean} [cache=true] Whether to cache the new user object if it isn't already
