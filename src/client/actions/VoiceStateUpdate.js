@@ -17,20 +17,6 @@ class VoiceStateUpdate extends Action {
 
       const newState = guild.voiceStates.add(data);
 
-      // Get the member
-      let member = guild.members.cache.get(data.user_id);
-      if (member && data.member) {
-        member._patch(data.member);
-      } else if (data.member && data.member.user && data.member.joined_at) {
-        member = guild.members.add(data.member);
-      }
-
-      // Emit event
-      if (member && member.user.id === client.user.id) {
-        client.emit('debug', `[VOICE] received voice state update: ${JSON.stringify(data)}`);
-        client.voice.onVoiceStateUpdate(data);
-      }
-
       /**
        * Emitted whenever a member changes voice state - e.g. joins/leaves a channel, mutes/unmutes.
        * @event Client#voiceStateUpdate
