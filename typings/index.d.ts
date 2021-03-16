@@ -14,7 +14,7 @@ declare enum OverwriteTypes {
   member = 1,
 }
 
-declare module "js" {
+declare module "@cascade-music/discord.js" {
   import BaseCollection from "@discordjs/collection";
   import { ChildProcess } from "child_process";
   import { EventEmitter } from "events";
@@ -1278,91 +1278,66 @@ declare module "js" {
     toString(): string;
   }
 
-  export class Message extends Base {
-    constructor(client: Client, data: object, channel: TextChannel | DMChannel | NewsChannel);
+  type TextableChannel = TextChannel | DMChannel | NewsChannel
+  export class Message<C extends TextableChannel = TextableChannel> extends Base {
+    constructor(client: Client, data: object, channel: TextableChannel);
 
     private patch(data: object): Message;
+
+    readonly cleanContent: string;
+    readonly createdAt: Date;
+    readonly deletable: boolean;
+    readonly editable: boolean;
+    readonly guild: Guild | null;
+    readonly editedAt: Date | null;
+    readonly member: GuildMember | null;
+    readonly partial: false;
+    readonly pinnable: boolean;
+    readonly referencedMessage: Message | null;
+    readonly url: string;
 
     activity: MessageActivity | null;
     application: ClientApplication | null;
     attachments: Collection<Snowflake, MessageAttachment>;
     author: User;
-    channel: TextChannel | DMChannel | NewsChannel;
-    readonly cleanContent: string;
+    channel: TextableChannel;
     content: string;
-    readonly createdAt: Date;
     createdTimestamp: number;
-    readonly deletable: boolean;
     deleted: boolean;
-    readonly editable: boolean;
-    readonly editedAt: Date | null;
     editedTimestamp: number | null;
     embeds: MessageEmbed[];
-    readonly guild: Guild | null;
     id: Snowflake;
-    readonly member: GuildMember | null;
     mentions: MessageMentions;
     nonce: string | number | null;
-    readonly partial: false;
-    readonly pinnable: boolean;
     pinned: boolean;
     reactions: ReactionManager;
     system: boolean;
     tts: boolean;
     type: MessageType;
-    readonly url: string;
     webhookID: Snowflake | null;
     flags: Readonly<MessageFlags>;
     reference: MessageReference | null;
-    readonly referencedMessage: Message | null;
 
-    awaitReactions(
-      filter: CollectorFilter,
-      options?: AwaitReactionsOptions,
-    ): Promise<Collection<Snowflake, MessageReaction>>;
-
+    awaitReactions(filter: CollectorFilter, options?: AwaitReactionsOptions): Promise<Collection<Snowflake, MessageReaction>>;
     createReactionCollector(filter: CollectorFilter, options?: ReactionCollectorOptions): ReactionCollector;
-
     delete(): Promise<Message>;
-
-    edit(
-      content: APIMessageContentResolvable | MessageEditOptions | MessageEmbed | APIMessage,
-    ): Promise<Message>;
+    edit(content: APIMessageContentResolvable | MessageEditOptions | MessageEmbed | APIMessage,): Promise<Message>;
     edit(content: StringResolvable, options: MessageEditOptions | MessageEmbed): Promise<Message>;
-
     equals(message: Message, rawData: object): boolean;
-
     fetchWebhook(): Promise<Webhook>;
-
     crosspost(): Promise<Message>;
-
     fetch(force?: boolean): Promise<Message>;
-
     pin(options?: { reason?: string }): Promise<Message>;
-
     react(emoji: EmojiIdentifierResolvable): Promise<MessageReaction>;
-
-    reply(
-      content: APIMessageContentResolvable | (MessageOptions & { split?: false }) | MessageAdditions,
-    ): Promise<Message>;
+    reply(content: APIMessageContentResolvable | (MessageOptions & { split?: false }) | MessageAdditions): Promise<Message>;
     reply(options: MessageOptions & { split: true | SplitOptions }): Promise<Message[]>;
     reply(options: MessageOptions | APIMessage): Promise<Message | Message[]>;
-    reply(
-      content: StringResolvable,
-      options: (MessageOptions & { split?: false }) | MessageAdditions,
-    ): Promise<Message>;
-    reply(
-      content: StringResolvable,
-      options: MessageOptions & { split: true | SplitOptions },
-    ): Promise<Message[]>;
+    reply(content: StringResolvable, options: (MessageOptions & { split?: false }) | MessageAdditions): Promise<Message>;
+    reply(content: StringResolvable, options: MessageOptions & { split: true | SplitOptions }): Promise<Message[]>;
     reply(content: StringResolvable, options: MessageOptions): Promise<Message | Message[]>;
-
     suppressEmbeds(suppress?: boolean): Promise<Message>;
-
     toJSON(): object;
-
     toString(): string;
-
     unpin(options?: { reason?: string }): Promise<Message>;
   }
 
@@ -1380,9 +1355,7 @@ declare module "js" {
     width: number | null;
 
     setFile(attachment: BufferResolvable | Stream, name?: string): this;
-
     setName(name: string): this;
-
     toJSON(): object;
   }
 
@@ -1390,7 +1363,6 @@ declare module "js" {
     constructor(channel: TextChannel | DMChannel, filter: CollectorFilter, options?: MessageCollectorOptions);
 
     private _handleChannelDeletion(channel: GuildChannel): void;
-
     private _handleGuildDeletion(guild: Guild): void;
 
     channel: Channel;
@@ -1398,67 +1370,48 @@ declare module "js" {
     received: number;
 
     collect(message: Message): Snowflake;
-
     dispose(message: Message): Snowflake;
-
     endReason(): string;
   }
 
   export class MessageEmbed {
     constructor(data?: MessageEmbed | MessageEmbedOptions);
 
+    readonly hexColor: string | null;
+    readonly length: number;
+    readonly video: MessageEmbedVideo | null;
+    readonly createdAt: Date | null;
+
     author: MessageEmbedAuthor | null;
     color: number | null;
-    readonly createdAt: Date | null;
     description: string | null;
     fields: EmbedField[];
     files: (MessageAttachment | string | FileOptions)[];
     footer: MessageEmbedFooter | null;
-    readonly hexColor: string | null;
     image: MessageEmbedImage | null;
-    readonly length: number;
     provider: MessageEmbedProvider | null;
     thumbnail: MessageEmbedThumbnail | null;
     timestamp: number | null;
     title: string | null;
     type: string;
     url: string | null;
-    readonly video: MessageEmbedVideo | null;
 
     addField(name: StringResolvable, value: StringResolvable, inline?: boolean): this;
-
     addFields(...fields: EmbedFieldData[] | EmbedFieldData[][]): this;
-
     attachFiles(file: (MessageAttachment | FileOptions | string)[]): this;
-
     setAuthor(name: StringResolvable, iconURL?: string, url?: string): this;
-
     setColor(color: ColorResolvable): this;
-
     setDescription(description: StringResolvable): this;
-
     setFooter(text: StringResolvable, iconURL?: string): this;
-
     setImage(url: string): this;
-
     setThumbnail(url: string): this;
-
     setTimestamp(timestamp?: Date | number): this;
-
     setTitle(title: StringResolvable): this;
-
     setURL(url: string): this;
-
     spliceFields(index: number, deleteCount: number, ...fields: EmbedFieldData[] | EmbedFieldData[][]): this;
-
     toJSON(): object;
 
-    static normalizeField(
-      name: StringResolvable,
-      value: StringResolvable,
-      inline?: boolean,
-    ): Required<EmbedFieldData>;
-
+    static normalizeField(name: StringResolvable, value: StringResolvable, inline?: boolean): Required<EmbedFieldData>;
     static normalizeFields(...fields: EmbedFieldData[] | EmbedFieldData[][]): Required<EmbedFieldData>[];
   }
 
